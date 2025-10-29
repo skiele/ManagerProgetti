@@ -483,28 +483,21 @@ export default function App() {
     if (!credentials) {
       setAppState('setup');
     } else {
-      // Check for an active session
-      const isAuthenticated = sessionStorage.getItem('isAuthenticated');
-      if (isAuthenticated) {
-        setAppState('authenticated');
-      } else {
-        setAppState('login');
-      }
+      // Always require login if credentials exist. No session persistence on refresh.
+      setAppState('login');
     }
   }, []);
 
   const handleSetupComplete = () => {
-    sessionStorage.setItem('isAuthenticated', 'true');
+    // After setup, log the user in for the current session
     setAppState('authenticated');
   };
 
   const handleLoginSuccess = () => {
-    sessionStorage.setItem('isAuthenticated', 'true');
     setAppState('authenticated');
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem('isAuthenticated');
     setAppState('login');
   };
 
