@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Client, Project, Todo, ProjectStatus } from './types';
+import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
 import { BriefcaseIcon, CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon } from './components/icons';
-import IncomeChart from './components/IncomeChart';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
 import LoginScreen from './components/LoginScreen';
 import SetupScreen from './components/SetupScreen';
+import Dashboard from './components/Dashboard';
+import ClientView from './components/ClientView';
 
 type AppState = 'setup' | 'login' | 'authenticated';
 
@@ -34,7 +35,15 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   };
   
   const handleAddProject = (clientId: string, name: string, value: number) => {
-    const newProject: Project = { id: crypto.randomUUID(), clientId, name, value, status: ProjectStatus.PreventivoDaInviare, createdAt: new Date().toISOString() };
+    const newProject: Project = { 
+      id: crypto.randomUUID(), 
+      clientId, 
+      name, 
+      value, 
+      workStatus: WorkStatus.PreventivoDaInviare, 
+      paymentStatus: PaymentStatus.DaFatturare, 
+      createdAt: new Date().toISOString() 
+    };
     setProjects(prev => [...prev, newProject]);
   };
 
@@ -152,23 +161,34 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     return project.value + tasksTotal;
   }, [projects, todos]);
 
-  const { totalIncome, potentialIncome } = useMemo(() => {
-    let total = 0;
+ const { collectedIncome, futureIncome, potentialIncome } = useMemo(() => {
+    let collected = 0;
+    let future = 0;
     let potential = 0;
+
     filteredProjects.forEach(p => {
+      if (p.workStatus === WorkStatus.Annullato) return;
+
       const projectTotal = getProjectTotal(p.id);
-      if (p.status === ProjectStatus.Pagato) {
-        total += projectTotal;
-      }
-      if ([ProjectStatus.PreventivoInviato, ProjectStatus.PreventivoAccettato, ProjectStatus.ProgettoConsegnato, ProjectStatus.AttesaDiPagamento].includes(p.status)) {
+      
+      if (p.paymentStatus === PaymentStatus.Pagato) {
+        collected += projectTotal;
+      } else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) {
+        future += projectTotal;
+      } else if (p.workStatus === WorkStatus.PreventivoDaInviare || p.workStatus === WorkStatus.PreventivoInviato) {
         potential += projectTotal;
       }
     });
-    return { totalIncome: total, potentialIncome: potential };
+
+    return { collectedIncome: collected, futureIncome: future, potentialIncome: potential };
   }, [filteredProjects, getProjectTotal]);
 
-  const handleUpdateProjectStatus = (id: string, status: ProjectStatus) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, status } : p));
+  const handleUpdateProjectWorkStatus = (id: string, workStatus: WorkStatus) => {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, workStatus } : p));
+  };
+  
+  const handleUpdateProjectPaymentStatus = (id: string, paymentStatus: PaymentStatus) => {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, paymentStatus } : p));
   };
   
   const handleToggleTodo = (id: string, completed: boolean) => {
@@ -232,7 +252,8 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
       <main className="flex-1 p-8 overflow-y-auto bg-light dark:bg-gray-900">
         {selectedView === 'dashboard' && <Dashboard 
-            totalIncome={totalIncome} 
+            collectedIncome={collectedIncome} 
+            futureIncome={futureIncome}
             potentialIncome={potentialIncome} 
             clients={clients} 
             projects={filteredProjects} 
@@ -249,7 +270,8 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                 client={selectedClient} 
                 projects={projects.filter(p => p.clientId === selectedClient.id)} 
                 todos={todos}
-                onUpdateProjectStatus={handleUpdateProjectStatus}
+                onUpdateProjectWorkStatus={handleUpdateProjectWorkStatus}
+                onUpdateProjectPaymentStatus={handleUpdateProjectPaymentStatus}
                 onToggleTodo={handleToggleTodo}
                 onAddProject={(clientId) => openModal('project', clientId)}
                 onAddTodo={(projectId) => openModal('todo', projectId)}
@@ -275,221 +297,25 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 };
 
 
-// --- Components defined outside App to prevent re-renders ---
-
-const statusConfig: Record<ProjectStatus, { color: string; label: string }> = {
-  [ProjectStatus.PreventivoDaInviare]: { color: 'bg-gray-500', label: 'Preventivo da Inviare' },
-  [ProjectStatus.PreventivoInviato]: { color: 'bg-blue-500', label: 'Preventivo Inviato' },
-  [ProjectStatus.PreventivoAccettato]: { color: 'bg-indigo-500', label: 'Preventivo Accettato' },
-  [ProjectStatus.ProgettoConsegnato]: { color: 'bg-purple-500', label: 'Progetto Consegnato' },
-  [ProjectStatus.AttesaDiPagamento]: { color: 'bg-yellow-500', label: 'Attesa di Pagamento' },
-  [ProjectStatus.Pagato]: { color: 'bg-green-500', label: 'Pagato' },
-};
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(amount);
-};
-
-interface TodoItemProps {
-  todo: Todo;
-  onToggle: (id: string, completed: boolean) => void;
-  onDelete: (id: string) => void;
-}
-
-const TodoItem: React.FC<TodoItemProps> = ({ todo, onToggle, onDelete }) => {
-  return (
-    <div className="group flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-      <div className="flex items-center">
-        <input
-          type="checkbox"
-          checked={todo.completed}
-          onChange={(e) => onToggle(todo.id, e.target.checked)}
-          className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary"
-        />
-        <span className={`ml-3 ${todo.completed ? 'line-through text-gray-500' : ''}`}>{todo.task}</span>
-      </div>
-      <div className="flex items-center">
-         {todo.dueDate && <span className="text-xs text-gray-500 mr-4">{new Date(todo.dueDate).toLocaleDateString('it-IT')}</span>}
-        <span className="font-semibold text-gray-700 dark:text-gray-300 mr-4">{formatCurrency(todo.income)}</span>
-        <button onClick={() => onDelete(todo.id)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" aria-label={`Elimina task ${todo.task}`}>
-            <TrashIcon className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-interface ProjectCardProps {
-  project: Project;
-  todos: Todo[];
-  onUpdateProjectStatus: (id: string, status: ProjectStatus) => void;
-  onToggleTodo: (id: string, completed: boolean) => void;
-  onAddTodo: (projectId: string) => void;
-  onDeleteProject: (id: string) => void;
-  onDeleteTodo: (id: string) => void;
-}
-
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, todos, onUpdateProjectStatus, onToggleTodo, onAddTodo, onDeleteProject, onDeleteTodo }) => {
-  const projectTotal = useMemo(() => project.value + todos.reduce((sum, todo) => sum + todo.income, 0), [project.value, todos]);
-  const completedTodos = useMemo(() => todos.filter(t => t.completed).length, [todos]);
-  const progress = todos.length > 0 ? (completedTodos / todos.length) * 100 : 0;
-  
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
-      <div className="p-4">
-        <div className="flex justify-between items-start">
-          <div className="flex-1 mr-4">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">{project.name}</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Creato il: {new Date(project.createdAt).toLocaleDateString('it-IT')}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <select 
-              value={project.status} 
-              onChange={(e) => onUpdateProjectStatus(project.id, e.target.value as ProjectStatus)}
-              className="text-sm font-medium text-white px-2 py-1 rounded-full border-none focus:ring-2 focus:ring-white/50 bg-opacity-80"
-              style={{ backgroundColor: statusConfig[project.status].color.replace('bg-', '#').replace('-500', '') }}
-            >
-              {Object.values(ProjectStatus).map(s => (
-                <option key={s} value={s} className="text-black">{statusConfig[s].label}</option>
-              ))}
-            </select>
-            <button onClick={() => onDeleteProject(project.id)} className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label={`Elimina progetto ${project.name}`}>
-                <TrashIcon className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-        <div className="mt-4">
-          <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-300 mb-1">
-            <span>Progresso</span>
-            <span>{Math.round(progress)}%</span>
-          </div>
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-            <div className="bg-primary h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
-          </div>
-        </div>
-      </div>
-      <div className="p-4 space-y-2 bg-gray-50 dark:bg-gray-800/50">
-        {todos.map(todo => <TodoItem key={todo.id} todo={todo} onToggle={onToggleTodo} onDelete={onDeleteTodo} />)}
-        <button onClick={() => onAddTodo(project.id)} className="w-full text-left p-2 text-primary hover:bg-primary/10 rounded-md transition-colors flex items-center">
-            <PlusIcon className="w-4 h-4 mr-2"/> Aggiungi To-Do
-        </button>
-      </div>
-      <div className="p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-end items-center">
-        <span className="text-lg font-bold text-gray-800 dark:text-gray-100">Totale: {formatCurrency(projectTotal)}</span>
-      </div>
-    </div>
-  );
-};
-
-interface DashboardProps {
-    totalIncome: number;
-    potentialIncome: number;
-    clients: Client[];
-    projects: Project[];
-    todos: Todo[];
-    filterYear: string;
-    setFilterYear: (year: string) => void;
-    filterMonth: string;
-    setFilterMonth: (month: string) => void;
-    availableYears: string[];
-}
-
-const Dashboard: React.FC<DashboardProps> = ({ totalIncome, potentialIncome, clients, projects, todos, filterYear, setFilterYear, filterMonth, setFilterMonth, availableYears }) => (
-    <div>
-        <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
-            <div className="flex gap-4 mb-6">
-                <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="p-2 border rounded dark:bg-gray-700 dark:border-gray-600">
-                    <option value="all">Tutti gli anni</option>
-                    {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
-                </select>
-                <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="p-2 border rounded dark:bg-gray-700 dark:border-gray-600">
-                    <option value="all">Tutti i mesi</option>
-                    {Array.from({ length: 12 }, (_, i) => (
-                        <option key={i + 1} value={i + 1}>{new Date(0, i).toLocaleString('it-IT', { month: 'long' })}</option>
-                    ))}
-                </select>
-            </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold text-gray-500 dark:text-gray-400">Incasso Totale</h3>
-                <p className="text-3xl font-bold text-green-500 mt-2">{formatCurrency(totalIncome)}</p>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold text-gray-500 dark:text-gray-400">Incasso Potenziale</h3>
-                <p className="text-3xl font-bold text-blue-500 mt-2">{formatCurrency(potentialIncome)}</p>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold text-gray-500 dark:text-gray-400">Clienti Attivi</h3>
-                <p className="text-3xl font-bold text-indigo-500 mt-2">{clients.length}</p>
-            </div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
-            <h3 className="text-xl font-bold mb-4">Incassi per Cliente</h3>
-            <IncomeChart clients={clients} projects={projects} todos={todos} />
-        </div>
-    </div>
-);
-
-interface ClientViewProps {
-    client: Client;
-    projects: Project[];
-    todos: Todo[];
-    onUpdateProjectStatus: (id: string, status: ProjectStatus) => void;
-    onToggleTodo: (id: string, completed: boolean) => void;
-    onAddProject: (clientId: string) => void;
-    onAddTodo: (projectId: string) => void;
-    onDeleteProject: (id: string) => void;
-    onDeleteTodo: (id: string) => void;
-}
-
-const ClientView: React.FC<ClientViewProps> = ({ client, projects, todos, onUpdateProjectStatus, onToggleTodo, onAddProject, onAddTodo, onDeleteProject, onDeleteTodo }) => (
-    <div>
-        <div className="flex justify-between items-center mb-6">
-            <div>
-                <h1 className="text-3xl font-bold">{client.name}</h1>
-                {client.email && <p className="text-gray-500">{client.email}</p>}
-            </div>
-            <button onClick={() => onAddProject(client.id)} className="bg-primary text-white px-4 py-2 rounded-lg font-semibold flex items-center hover:bg-secondary transition-colors shadow-lg">
-                <PlusIcon className="w-5 h-5 mr-2"/> Nuovo Progetto
-            </button>
-        </div>
-        <div className="space-y-6">
-            {projects.map(project => (
-                <ProjectCard
-                    key={project.id}
-                    project={project}
-                    todos={todos.filter(todo => todo.projectId === project.id)}
-                    onUpdateProjectStatus={onUpdateProjectStatus}
-                    onToggleTodo={onToggleTodo}
-                    onAddTodo={onAddTodo}
-                    onDeleteProject={onDeleteProject}
-                    onDeleteTodo={onDeleteTodo}
-                />
-            ))}
-             {projects.length === 0 && <p className="text-center text-gray-500 py-8">Nessun progetto per questo cliente.</p>}
-        </div>
-    </div>
-);
-
 // --- Authentication Controller Component ---
 export default function App() {
   const [appState, setAppState] = useState<AppState | 'loading'>('loading');
 
   useEffect(() => {
-    // Check if user credentials exist
-    const credentials = localStorage.getItem('userCredentials');
-    if (!credentials) {
-      setAppState('setup');
-    } else {
-      // Always require login if credentials exist. No session persistence on refresh.
-      setAppState('login');
+    try {
+        const credentials = localStorage.getItem('userCredentials');
+        if (!credentials) {
+          setAppState('setup');
+        } else {
+          setAppState('login');
+        }
+    } catch(e) {
+        console.error("Errore durante la lettura dal localStorage:", e);
+        setAppState('setup');
     }
   }, []);
 
   const handleSetupComplete = () => {
-    // After setup, log the user in for the current session
     setAppState('authenticated');
   };
 
@@ -500,9 +326,9 @@ export default function App() {
   const handleLogout = () => {
     setAppState('login');
   };
-
+  
   if (appState === 'loading') {
-    return <div className="h-screen w-screen flex items-center justify-center bg-light dark:bg-gray-900"></div>; // Or a proper loading spinner
+    return <div className="h-screen w-screen flex items-center justify-center bg-light dark:bg-gray-900" />;
   }
 
   if (appState === 'setup') {

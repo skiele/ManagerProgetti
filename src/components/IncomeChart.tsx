@@ -1,11 +1,12 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Client, Project, Todo, ProjectStatus } from '../types';
+import { Client, Project, Todo, WorkStatus, PaymentStatus } from '../types';
 
 interface ChartData {
   name: string;
-  incasso: number;
-  potenziale: number;
+  incassati: number;
+  futuri: number;
+  potenziali: number;
 }
 
 interface IncomeChartProps {
@@ -24,19 +25,31 @@ const IncomeChart: React.FC<IncomeChartProps> = ({ clients, projects, todos }) =
   
   const data: ChartData[] = clients.map(client => {
     const clientProjects = projects.filter(p => p.clientId === client.id);
-    const incasso = clientProjects
-      .filter(p => p.status === ProjectStatus.Pagato)
-      .reduce((sum, p) => sum + getProjectTotal(p), 0);
-    const potenziale = clientProjects
-      .filter(p => p.status === ProjectStatus.PreventivoInviato || p.status === ProjectStatus.PreventivoAccettato || p.status === ProjectStatus.ProgettoConsegnato || p.status === ProjectStatus.AttesaDiPagamento)
-      .reduce((sum, p) => sum + getProjectTotal(p), 0);
-      
+    let incassati = 0;
+    let futuri = 0;
+    let potenziali = 0;
+
+    clientProjects.forEach(p => {
+        if (p.workStatus === WorkStatus.Annullato) return;
+
+        const projectTotal = getProjectTotal(p);
+
+        if (p.paymentStatus === PaymentStatus.Pagato) {
+            incassati += projectTotal;
+        } else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) {
+            futuri += projectTotal;
+        } else if (p.workStatus === WorkStatus.PreventivoDaInviare || p.workStatus === WorkStatus.PreventivoInviato) {
+            potenziali += projectTotal;
+        }
+    });
+
     return {
       name: client.name,
-      incasso,
-      potenziale,
+      incassati,
+      futuri,
+      potenziali,
     };
-  }).filter(d => d.incasso > 0 || d.potenziale > 0);
+  }).filter(d => d.incassati > 0 || d.futuri > 0 || d.potenziali > 0);
 
   if (data.length === 0) {
     return (
@@ -70,8 +83,9 @@ const IncomeChart: React.FC<IncomeChartProps> = ({ clients, projects, todos }) =
           formatter={(value: number) => `€${value.toLocaleString('it-IT')}`}
         />
         <Legend />
-        <Bar dataKey="incasso" fill="#22c55e" name="Incasso" />
-        <Bar dataKey="potenziale" fill="#3b82f6" name="Potenziale" />
+        <Bar dataKey="incassati" fill="#22c55e" name="Incassati" />
+        <Bar dataKey="futuri" fill="#3b82f6" name="Incassi Futuri" />
+        <Bar dataKey="potenziali" fill="#f97316" name="Incassi Potenziali" />
       </BarChart>
     </ResponsiveContainer>
   );
