@@ -4,21 +4,36 @@ function useLocalStorage<T>(key: string, initialValue: T, migrator?: (data: any)
   const [storedValue, setStoredValue] = useState<T>(() => {
     try {
       const item = window.localStorage.getItem(key);
-      if (!item) {
+
+      // Caso 1: Nessun dato in memoria. Usa il valore iniziale e salvalo.
+      if (item === null) {
+        window.localStorage.setItem(key, JSON.stringify(initialValue));
         return initialValue;
       }
-      
-      let data = JSON.parse(item);
-      
-      // Se viene fornita una funzione di migrazione, la eseguiamo sui dati caricati.
-      if (migrator) {
-        data = migrator(data);
+
+      const data = JSON.parse(item);
+
+      // Caso 2: I dati esistono, ma non c'è una funzione di migrazione. Restituisci i dati.
+      if (!migrator) {
+        return data;
       }
       
-      return data;
+      // Caso 3: I dati esistono e c'è una funzione di migrazione.
+      const migratedData = migrator(data);
+      
+      // Confronta i dati originali con quelli migrati. Se sono diversi, aggiorna localStorage.
+      // Questo impedisce scritture non necessarie se i dati sono già nel nuovo formato.
+      if (JSON.stringify(data) !== JSON.stringify(migratedData)) {
+        console.log(`Eseguo la migrazione dei dati per la chiave: ${key}`);
+        window.localStorage.setItem(key, JSON.stringify(migratedData));
+      }
+
+      return migratedData;
 
     } catch (error) {
-      console.error(error);
+      console.error(`Errore con la chiave localStorage "${key}":`, error);
+      // In caso di errore (es. parsing), torna al valore iniziale e salvalo per sicurezza.
+      window.localStorage.setItem(key, JSON.stringify(initialValue));
       return initialValue;
     }
   });
