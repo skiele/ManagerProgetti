@@ -1,3 +1,4 @@
+
 export enum WorkStatus {
   PreventivoDaInviare = 'preventivo da inviare',
   PreventivoInviato = 'preventivo inviato',
@@ -26,6 +27,7 @@ export interface Project {
   workStatus: WorkStatus;
   paymentStatus: PaymentStatus;
   createdAt: string;
+  notes?: string;
 }
 
 export interface Todo {

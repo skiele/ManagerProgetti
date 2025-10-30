@@ -1,7 +1,8 @@
+
 import React, { useState, useMemo, useCallback } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
-import { BriefcaseIcon, CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon } from './components/icons';
+import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
 import LoginScreen from './components/LoginScreen';
@@ -251,6 +252,10 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const handleToggleTodo = (id: string, completed: boolean) => {
     setTodos(prev => prev.map(t => t.id === id ? { ...t, completed } : t));
   };
+  
+  const handleUpdateProjectNotes = (id: string, notes: string) => {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, notes } : p));
+  };
 
   const selectedClient = useMemo(() => clients.find(c => c.id === selectedView), [clients, selectedView]);
 
@@ -258,8 +263,8 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     <div className="flex h-screen font-sans">
       <aside className="w-64 bg-gray-800 text-white flex flex-col p-4 shadow-2xl">
         <div className="flex items-center mb-8">
-            <BriefcaseIcon className="w-8 h-8 text-accent"/>
-            <h1 className="text-xl font-bold ml-2">Gestione Lavori</h1>
+            <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
+            <h1 className="text-2xl font-bold ml-2">Progetta</h1>
         </div>
         <nav className="flex-grow">
             <ul>
@@ -337,6 +342,7 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                 onAddTodo={(projectId) => openModal('todo', projectId)}
                 onDeleteProject={handleDeleteProject}
                 onDeleteTodo={handleDeleteTodo}
+                onUpdateProjectNotes={handleUpdateProjectNotes}
             />
         )}
       </main>

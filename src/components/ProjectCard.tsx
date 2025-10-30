@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+
+import React, { useMemo, useState, useEffect } from 'react';
 import { Project, Todo, WorkStatus, PaymentStatus } from '../types';
 import { PlusIcon, TrashIcon } from './icons';
 import { workStatusConfig, paymentStatusConfig } from '../config/status';
@@ -14,13 +15,36 @@ interface ProjectCardProps {
   onAddTodo: (projectId: string) => void;
   onDeleteProject: (id: string) => void;
   onDeleteTodo: (id: string) => void;
+  onUpdateProjectNotes: (id: string, notes: string) => void;
 }
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, todos, onUpdateProjectWorkStatus, onUpdateProjectPaymentStatus, onToggleTodo, onAddTodo, onDeleteProject, onDeleteTodo }) => {
+const ProjectCard: React.FC<ProjectCardProps> = ({ 
+  project, 
+  todos, 
+  onUpdateProjectWorkStatus, 
+  onUpdateProjectPaymentStatus, 
+  onToggleTodo, 
+  onAddTodo, 
+  onDeleteProject, 
+  onDeleteTodo,
+  onUpdateProjectNotes
+}) => {
   const projectTotal = useMemo(() => project.value + todos.reduce((sum, todo) => sum + todo.income, 0), [project.value, todos]);
   const completedTodos = useMemo(() => todos.filter(t => t.completed).length, [todos]);
   const progress = todos.length > 0 ? (completedTodos / todos.length) * 100 : 0;
   
+  const [noteContent, setNoteContent] = useState(project.notes || '');
+
+  useEffect(() => {
+    setNoteContent(project.notes || '');
+  }, [project.notes]);
+  
+  const handleNoteBlur = () => {
+    if (noteContent !== project.notes) {
+      onUpdateProjectNotes(project.id, noteContent);
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
       <div className="p-4">
@@ -65,6 +89,20 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, todos, onUpdateProje
           </div>
         </div>
       </div>
+
+      <div className="p-4 border-t border-gray-100 dark:border-gray-700/50">
+        <label htmlFor={`notes-${project.id}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Note</label>
+        <textarea
+            id={`notes-${project.id}`}
+            value={noteContent}
+            onChange={(e) => setNoteContent(e.target.value)}
+            onBlur={handleNoteBlur}
+            placeholder="Aggiungi una nota..."
+            className="w-full p-2 border border-yellow-300 rounded-md bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-700/50 dark:text-gray-200 focus:ring-primary focus:border-primary transition"
+            rows={3}
+        />
+      </div>
+
       <div className="p-4 space-y-2 bg-gray-50 dark:bg-gray-800/50">
         {todos.map(todo => <TodoItem key={todo.id} todo={todo} onToggle={onToggleTodo} onDelete={onDeleteTodo} />)}
         <button onClick={() => onAddTodo(project.id)} className="w-full text-left p-2 text-primary hover:bg-primary/10 rounded-md transition-colors flex items-center">

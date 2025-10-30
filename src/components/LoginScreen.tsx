@@ -1,5 +1,5 @@
+
 import React, { useState } from 'react';
-import { BriefcaseIcon } from './icons';
 import { hashPassword } from '../utils/auth';
 
 interface LoginScreenProps {
@@ -35,9 +35,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     <div className="flex items-center justify-center h-screen bg-light dark:bg-gray-900">
       <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-lg shadow-2xl">
         <div className="text-center">
-            <BriefcaseIcon className="w-12 h-12 mx-auto text-primary" />
+            <img src="/logo.svg" alt="Progetta Logo" className="w-12 h-12 mx-auto"/>
             <h1 className="mt-4 text-3xl font-bold text-gray-800 dark:text-gray-100">
-                Accesso a Gestione Lavori
+                Accesso a Progetta
             </h1>
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                 Bentornato! Inserisci le tue credenziali.

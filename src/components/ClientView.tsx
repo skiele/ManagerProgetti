@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from '../types';
 import { PlusIcon } from './icons';
@@ -14,9 +15,10 @@ interface ClientViewProps {
     onAddTodo: (projectId: string) => void;
     onDeleteProject: (id: string) => void;
     onDeleteTodo: (id: string) => void;
+    onUpdateProjectNotes: (id: string, notes: string) => void;
 }
 
-const ClientView: React.FC<ClientViewProps> = ({ client, projects, todos, onUpdateProjectWorkStatus, onUpdateProjectPaymentStatus, onToggleTodo, onAddProject, onAddTodo, onDeleteProject, onDeleteTodo }) => (
+const ClientView: React.FC<ClientViewProps> = ({ client, projects, todos, onUpdateProjectWorkStatus, onUpdateProjectPaymentStatus, onToggleTodo, onAddProject, onAddTodo, onDeleteProject, onDeleteTodo, onUpdateProjectNotes }) => (
     <div>
         <div className="flex justify-between items-center mb-6">
             <div>
@@ -39,6 +41,7 @@ const ClientView: React.FC<ClientViewProps> = ({ client, projects, todos, onUpda
                     onAddTodo={onAddTodo}
                     onDeleteProject={onDeleteProject}
                     onDeleteTodo={onDeleteTodo}
+                    onUpdateProjectNotes={onUpdateProjectNotes}
                 />
             ))}
              {projects.length === 0 && <p className="text-center text-gray-500 py-8">Nessun progetto per questo cliente.</p>}
