@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
 import { BriefcaseIcon, CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon } from './components/icons';
@@ -20,6 +20,69 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [clients, setClients] = useLocalStorage<Client[]>('clients', initialClients);
   const [projects, setProjects] = useLocalStorage<Project[]>('projects', initialProjects);
   const [todos, setTodos] = useLocalStorage<Todo[]>('todos', initialTodos);
+
+  useEffect(() => {
+    // Questo effetto viene eseguito una sola volta al montaggio per migrare le vecchie strutture dati se necessario.
+    const projectsFromStorage = JSON.parse(localStorage.getItem('projects') || '[]') as any[];
+    const isMigrationNeeded = projectsFromStorage.length > 0 && projectsFromStorage.some(p => 'status' in p && !('workStatus' in p));
+
+    if (isMigrationNeeded) {
+        console.log('Avvio migrazione dati...');
+        const migratedProjects = projectsFromStorage.map(p => {
+            if (p.workStatus || !('status' in p)) {
+                return p; // Già nel nuovo formato o non necessita di migrazione
+            }
+
+            const oldStatus = p.status;
+            let workStatus: WorkStatus = WorkStatus.PreventivoDaInviare;
+            let paymentStatus: PaymentStatus = PaymentStatus.DaFatturare;
+
+            // Mappatura dai valori dell'enum ProjectStatus vecchio
+            switch (oldStatus) {
+                case 'preventivo da inviare':
+                    workStatus = WorkStatus.PreventivoDaInviare;
+                    paymentStatus = PaymentStatus.DaFatturare;
+                    break;
+                case 'preventivo inviato':
+                    workStatus = WorkStatus.PreventivoInviato;
+                    paymentStatus = PaymentStatus.DaFatturare;
+                    break;
+                case 'preventivo accettato':
+                    workStatus = WorkStatus.InLavorazione;
+                    paymentStatus = PaymentStatus.DaFatturare;
+                    break;
+                case 'progetto consegnato':
+                    workStatus = WorkStatus.Consegnato;
+                    paymentStatus = PaymentStatus.DaFatturare;
+                    break;
+                case 'attesa di pagamento':
+                    workStatus = WorkStatus.Consegnato;
+                    paymentStatus = PaymentStatus.Fatturato;
+                    break;
+                case 'pagato':
+                    workStatus = WorkStatus.Consegnato;
+                    paymentStatus = PaymentStatus.Pagato;
+                    break;
+                default:
+                    // Assegna un default sensato se il vecchio stato è sconosciuto
+                    workStatus = WorkStatus.PreventivoDaInviare;
+                    paymentStatus = PaymentStatus.DaFatturare;
+            }
+
+            // Crea un nuovo oggetto, rimuovendo la vecchia proprietà 'status'
+            const { status, ...rest } = p;
+            return {
+                ...rest,
+                workStatus,
+                paymentStatus,
+            };
+        });
+        
+        setProjects(migratedProjects as Project[]);
+        console.log('Migrazione dati completata.');
+    }
+  }, []); // L'array di dipendenze vuoto assicura che venga eseguito solo una volta
+
 
   const [selectedView, setSelectedView] = useState<string>('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
