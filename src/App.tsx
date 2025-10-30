@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useCallback } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -311,7 +312,7 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             </button>
         </div>
         <div className="mt-auto pt-4 text-center text-xs text-gray-400">
-          v1.0.0
+          v1.0.1
         </div>
       </aside>
 
