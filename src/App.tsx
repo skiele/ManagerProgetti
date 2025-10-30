@@ -116,6 +116,15 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                 </>;
             case 'project':
                 return <>
+                    <select
+                        className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4"
+                        value={currentContextId || ''}
+                        onChange={(e) => setCurrentContextId(e.target.value)}
+                        required
+                    >
+                        <option value="" disabled>Seleziona Cliente</option>
+                        {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
                     <input type="text" placeholder="Nome Progetto" value={name} onChange={e => setName(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" required/>
                     <input type="number" placeholder="Valore Progetto (€)" value={projectValue} onChange={e => setProjectValue(Number(e.target.value))} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600" required/>
                 </>;
@@ -303,6 +312,12 @@ export default function App() {
 
   useEffect(() => {
     try {
+        const isAuthenticated = sessionStorage.getItem('isAuthenticated');
+        if (isAuthenticated === 'true') {
+            setAppState('authenticated');
+            return;
+        }
+
         const credentials = localStorage.getItem('userCredentials');
         if (!credentials) {
           setAppState('setup');
@@ -310,7 +325,7 @@ export default function App() {
           setAppState('login');
         }
     } catch(e) {
-        console.error("Errore durante la lettura dal localStorage:", e);
+        console.error("Errore durante la lettura dallo storage:", e);
         setAppState('setup');
     }
   }, []);
@@ -320,10 +335,12 @@ export default function App() {
   };
 
   const handleLoginSuccess = () => {
+    sessionStorage.setItem('isAuthenticated', 'true');
     setAppState('authenticated');
   };
 
   const handleLogout = () => {
+    sessionStorage.removeItem('isAuthenticated');
     setAppState('login');
   };
   
