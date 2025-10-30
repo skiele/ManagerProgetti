@@ -257,6 +257,9 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                 <LogOutIcon className="w-5 h-5 mr-2"/> Esci
             </button>
         </div>
+        <div className="mt-auto pt-4 text-center text-xs text-gray-400">
+          v1.0.0
+        </div>
       </aside>
 
       <main className="flex-1 p-8 overflow-y-auto bg-light dark:bg-gray-900">
