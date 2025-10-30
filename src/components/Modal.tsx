@@ -21,6 +21,12 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
     }
   }, [isOpen]);
 
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   if (!shouldRender) {
     return null;
   }
@@ -30,14 +36,13 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
       className={`fixed inset-0 z-50 flex justify-center items-center p-4 transition-opacity duration-300 ease-in-out
         ${isOpen ? 'bg-opacity-75' : 'bg-opacity-0'}
         bg-black`}
-      onClick={onClose}
+      onClick={handleBackdropClick}
       aria-modal="true"
       role="dialog"
     >
       <div
         className={`bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-md transform transition-all duration-300 ease-in-out
           ${isOpen ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-4 scale-95'}`}
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{title}</h3>

@@ -316,7 +316,7 @@ export default function App() {
   }, []);
 
   const handleSetupComplete = () => {
-    setAppState('authenticated');
+    setAppState('login');
   };
 
   const handleLoginSuccess = () => {
