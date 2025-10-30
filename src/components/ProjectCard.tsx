@@ -34,8 +34,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, todos, onUpdateProje
               <select 
                 value={project.workStatus} 
                 onChange={(e) => onUpdateProjectWorkStatus(project.id, e.target.value as WorkStatus)}
-                className="text-sm font-medium text-white px-2 py-1 rounded-full border-none focus:ring-2 focus:ring-white/50 bg-opacity-80 appearance-none"
-                style={{ backgroundColor: workStatusConfig[project.workStatus].color.replace('bg-', '#').replace('-500', '') }}
+                className={`text-sm font-medium text-white px-2 py-1 rounded-full border-none focus:ring-2 focus:ring-white/50 appearance-none ${workStatusConfig[project.workStatus].color}`}
               >
                 {Object.values(WorkStatus).map(s => (
                   <option key={s} value={s} className="text-black bg-white dark:bg-gray-700 dark:text-white">{workStatusConfig[s].label}</option>
@@ -44,8 +43,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, todos, onUpdateProje
               <select 
                 value={project.paymentStatus} 
                 onChange={(e) => onUpdateProjectPaymentStatus(project.id, e.target.value as PaymentStatus)}
-                className="text-sm font-medium text-white px-2 py-1 rounded-full border-none focus:ring-2 focus:ring-white/50 bg-opacity-80 appearance-none"
-                style={{ backgroundColor: paymentStatusConfig[project.paymentStatus].color.replace('bg-', '#').replace('-500', '') }}
+                className={`text-sm font-medium text-white px-2 py-1 rounded-full border-none focus:ring-2 focus:ring-white/50 appearance-none ${paymentStatusConfig[project.paymentStatus].color}`}
               >
                 {Object.values(PaymentStatus).map(s => (
                   <option key={s} value={s} className="text-black bg-white dark:bg-gray-700 dark:text-white">{paymentStatusConfig[s].label}</option>
