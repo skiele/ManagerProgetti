@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
 import { BriefcaseIcon, CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon } from './components/icons';
@@ -307,28 +307,26 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
 
 // --- Authentication Controller Component ---
-export default function App() {
-  const [appState, setAppState] = useState<AppState | 'loading'>('loading');
 
-  useEffect(() => {
-    try {
-        const isAuthenticated = sessionStorage.getItem('isAuthenticated');
-        if (isAuthenticated === 'true') {
-            setAppState('authenticated');
-            return;
-        }
-
-        const credentials = localStorage.getItem('userCredentials');
-        if (!credentials) {
-          setAppState('setup');
-        } else {
-          setAppState('login');
-        }
-    } catch(e) {
-        console.error("Errore durante la lettura dallo storage:", e);
-        setAppState('setup');
+const getInitialAppState = (): AppState => {
+  try {
+    const isAuthenticated = sessionStorage.getItem('isAuthenticated');
+    if (isAuthenticated === 'true') {
+      return 'authenticated';
     }
-  }, []);
+    const hasCredentials = !!localStorage.getItem('userCredentials');
+    if (hasCredentials) {
+      return 'login';
+    }
+    return 'setup';
+  } catch (e) {
+    console.error("Errore durante la lettura dallo storage:", e);
+    return 'setup';
+  }
+};
+
+export default function App() {
+  const [appState, setAppState] = useState<AppState>(getInitialAppState());
 
   const handleSetupComplete = () => {
     setAppState('login');
@@ -344,17 +342,15 @@ export default function App() {
     setAppState('login');
   };
   
-  if (appState === 'loading') {
-    return <div className="h-screen w-screen flex items-center justify-center bg-light dark:bg-gray-900" />;
+  switch (appState) {
+    case 'setup':
+      return <SetupScreen onSetupComplete={handleSetupComplete} />;
+    case 'login':
+      return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+    case 'authenticated':
+      return <MainApp onLogout={handleLogout} />;
+    default:
+       // Fallback in case of an unexpected state
+      return <SetupScreen onSetupComplete={handleSetupComplete} />;
   }
-
-  if (appState === 'setup') {
-    return <SetupScreen onSetupComplete={handleSetupComplete} />;
-  }
-
-  if (appState === 'login') {
-    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
-  }
-  
-  return <MainApp onLogout={handleLogout} />;
 }
