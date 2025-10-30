@@ -1,12 +1,23 @@
 import { useState, Dispatch, SetStateAction } from 'react';
 
-function useLocalStorage<T>(key: string, initialValue: T): [T, Dispatch<SetStateAction<T>>] {
+function useLocalStorage<T>(key: string, initialValue: T, migrator?: (data: any) => T): [T, Dispatch<SetStateAction<T>>] {
   const [storedValue, setStoredValue] = useState<T>(() => {
     try {
       const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error)
-      {
+      if (!item) {
+        return initialValue;
+      }
+      
+      let data = JSON.parse(item);
+      
+      // Se viene fornita una funzione di migrazione, la eseguiamo sui dati caricati.
+      if (migrator) {
+        data = migrator(data);
+      }
+      
+      return data;
+
+    } catch (error) {
       console.error(error);
       return initialValue;
     }

@@ -15,10 +15,58 @@ const initialClients: Client[] = [];
 const initialProjects: Project[] = [];
 const initialTodos: Todo[] = [];
 
+// --- Funzioni di Migrazione ---
+
+// Questa funzione mappa i vecchi stati dei progetti al nuovo formato più dettagliato.
+const mapOldStatus = (oldStatus: string) => {
+    switch (oldStatus) {
+        case 'preventivo da inviare':
+            return { workStatus: WorkStatus.PreventivoDaInviare, paymentStatus: PaymentStatus.DaFatturare };
+        case 'preventivo inviato':
+            return { workStatus: WorkStatus.PreventivoInviato, paymentStatus: PaymentStatus.DaFatturare };
+        case 'preventivo accettato':
+            return { workStatus: WorkStatus.InLavorazione, paymentStatus: PaymentStatus.DaFatturare };
+        case 'progetto consegnato':
+            return { workStatus: WorkStatus.Consegnato, paymentStatus: PaymentStatus.DaFatturare };
+        case 'attesa di pagamento':
+            return { workStatus: WorkStatus.Consegnato, paymentStatus: PaymentStatus.Fatturato };
+        case 'pagato':
+            return { workStatus: WorkStatus.Consegnato, paymentStatus: PaymentStatus.Pagato };
+        default:
+            // Un fallback sicuro per stati sconosciuti o vecchi.
+            return { workStatus: WorkStatus.PreventivoDaInviare, paymentStatus: PaymentStatus.DaFatturare };
+    }
+};
+
+/**
+ * Funzione migratore per i progetti. Controlla ogni progetto e lo converte al nuovo formato se necessario.
+ * Viene passata all'hook useLocalStorage per essere eseguita una sola volta al caricamento iniziale dei dati.
+ */
+const projectMigrator = (data: any): Project[] => {
+  if (!Array.isArray(data)) {
+    return initialProjects;
+  }
+  
+  return data.map(project => {
+    // Se 'status' esiste e 'workStatus' non esiste, allora è un vecchio progetto da migrare.
+    if (project && typeof project.status === 'string' && typeof project.workStatus === 'undefined') {
+      const { status: oldStatus, ...restOfProject } = project;
+      const newStatuses = mapOldStatus(oldStatus);
+      return {
+        ...restOfProject,
+        ...newStatuses,
+      };
+    }
+    // Altrimenti, si assume che il progetto sia già nel formato corretto o non valido (verrà filtrato dopo se necessario).
+    return project;
+  });
+};
+
+
 // --- Main Application Component (Protected) ---
 const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [clients, setClients] = useLocalStorage<Client[]>('clients', initialClients);
-  const [projects, setProjects] = useLocalStorage<Project[]>('projects', initialProjects);
+  const [projects, setProjects] = useLocalStorage<Project[]>('projects', initialProjects, projectMigrator);
   const [todos, setTodos] = useLocalStorage<Todo[]>('todos', initialTodos);
 
   const [selectedView, setSelectedView] = useState<string>('dashboard');
