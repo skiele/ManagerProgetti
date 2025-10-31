@@ -1,5 +1,4 @@
 
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { Project, Todo, WorkStatus, PaymentStatus } from '../types';
 import { PlusIcon, TrashIcon, CopyIcon } from './icons';

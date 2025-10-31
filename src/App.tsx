@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
 import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon } from './components/icons';
@@ -25,24 +26,35 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   const [clients, setClients] = useState<Client[]>(initialData.clients);
   const [projects, setProjects] = useState<Project[]>(initialData.projects);
   const [todos, setTodos] = useState<Todo[]>(initialData.todos);
+  const isInitialLoad = useRef(true);
   
   // Effetto per salvare i dati ad ogni modifica
   useEffect(() => {
-    if (initialData.clients === clients && initialData.projects === projects && initialData.todos === todos) {
+    // CORREZIONE CRITICA: Impedisce il salvataggio al primo caricamento.
+    // Il salvataggio avviene solo dopo che l'utente ha interagito e modificato i dati.
+    if (isInitialLoad.current) {
         return;
     }
+
     const handler = setTimeout(() => {
       firebaseService.saveData(userId, { clients, projects, todos });
     }, 1000); // Debounce saving to avoid too many writes
     
     return () => clearTimeout(handler);
-  }, [clients, projects, todos, userId, initialData]);
+  }, [clients, projects, todos, userId]);
 
   // Sincronizza lo stato se i dati iniziali cambiano (es. primo caricamento)
+  // e imposta il flag per permettere i salvataggi successivi
   useEffect(() => {
       setClients(initialData.clients);
       setProjects(initialData.projects);
       setTodos(initialData.todos);
+      
+      // Dopo il primo caricamento, i salvataggi futuri sono permessi.
+      const timer = setTimeout(() => {
+          isInitialLoad.current = false;
+      }, 500); // Piccolo ritardo per sicurezza
+      return () => clearTimeout(timer);
   }, [initialData]);
 
 
@@ -89,6 +101,10 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     setIsSettingsMenuOpen(false);
     try {
         const currentCloudData = await firebaseService.getData(userId);
+        if (!currentCloudData || currentCloudData.clients.length === 0) {
+            alert("Non ci sono dati da esportare.");
+            return;
+        }
         const dataStr = JSON.stringify(currentCloudData, null, 2);
         const dataBlob = new Blob([dataStr], { type: 'application/json' });
         const url = URL.createObjectURL(dataBlob);
@@ -591,7 +607,8 @@ export default function App() {
         : <SetupScreen onNavigateToLogin={() => setAuthView('login')} />;
     case 'authenticated':
       if (!authState.data || !authState.user) {
-        return <div className="flex items-center justify-center h-screen">Errore: Dati utente non disponibili.</div>;
+        // Mostra uno stato di caricamento anche qui per gestire la transizione
+        return <div className="flex items-center justify-center h-screen bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">Caricamento dati utente...</div>;
       }
       return <MainApp onLogout={handleLogout} initialData={authState.data} userId={authState.user.uid} />;
     default:

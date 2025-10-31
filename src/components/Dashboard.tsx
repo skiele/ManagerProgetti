@@ -1,3 +1,4 @@
+
 import React from 'react';
 import IncomeChart from './IncomeChart';
 import { formatCurrency } from '../utils/formatting';

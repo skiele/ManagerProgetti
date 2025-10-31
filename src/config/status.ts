@@ -1,3 +1,4 @@
+
 import { WorkStatus, PaymentStatus } from '../types';
 
 export const workStatusConfig: Record<WorkStatus, { color: string; label: string }> = {
