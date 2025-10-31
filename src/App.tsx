@@ -508,7 +508,25 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
   const handleUpdateProjectPaymentStatus = (id: string, paymentStatus: PaymentStatus) => {
     setProjects(prev => {
-      const newProjects = prev.map(p => p.id === id ? { ...p, paymentStatus, paidAt: paymentStatus === PaymentStatus.Pagato ? (p.paidAt || new Date().toISOString()) : undefined } : p);
+      const newProjects = prev.map(p => {
+        if (p.id === id) {
+          // Rimuovi 'paidAt' per evitare di inviare 'undefined' a Firestore.
+          // Verrà riaggiunto solo se lo stato è 'Pagato'.
+          const { paidAt, ...rest } = p;
+          const updatedProject: Project = {
+            ...rest,
+            paymentStatus,
+          };
+
+          if (paymentStatus === PaymentStatus.Pagato) {
+            // Aggiungi 'paidAt' solo se lo stato è 'Pagato',
+            // usando la data esistente o creandone una nuova.
+            updatedProject.paidAt = p.paidAt || new Date().toISOString();
+          }
+          return updatedProject;
+        }
+        return p;
+      });
       saveDataToCloud({ projects: newProjects });
       return newProjects;
     });
