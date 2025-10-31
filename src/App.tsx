@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
-import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, DownloadIcon, UploadIcon, CopyIcon, SunIcon, MoonIcon } from './components/icons';
+import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
 import LoginScreen from './components/LoginScreen';
@@ -57,8 +57,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
   const [filterYear, setFilterYear] = useState('all');
   const [filterMonth, setFilterMonth] = useState('all');
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'dark');
 
@@ -198,53 +196,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   
   const handleDragEnd = (e: React.DragEvent<HTMLLIElement>) => e.currentTarget.classList.remove('opacity-50', 'bg-primary');
   
-  const handleExportData = () => {
-    try {
-        const dataToExport = { clients, projects, todos };
-        const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(dataToExport, null, 2))}`;
-        const link = document.createElement("a");
-        link.href = jsonString;
-        const date = new Date().toISOString().slice(0, 10);
-        link.download = `progetta_backup_${date}.json`;
-        link.click();
-    } catch (error) {
-        console.error("Errore durante l'esportazione:", error);
-        alert("Si è verificato un errore durante l'esportazione dei dati.");
-    }
-  };
-
-  const handleImportClick = () => fileInputRef.current?.click();
-  
-  const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-          try {
-              const text = e.target?.result;
-              if (typeof text !== 'string') throw new Error("Il file non può essere letto.");
-              const importedData = JSON.parse(text);
-              if (!importedData.clients || !importedData.projects || !importedData.todos) throw new Error("Struttura file non valida.");
-
-              if (window.confirm("Sei sicuro? I dati attuali verranno sovrascritti.")) {
-                  setClients(importedData.clients);
-                  setProjects(importedData.projects);
-                  setTodos(importedData.todos);
-                  firebaseService.saveData(userId, importedData);
-                  alert("Dati importati e salvati sul cloud!");
-                  setSelectedView('dashboard');
-              }
-          } catch (error) {
-              alert(`Errore importazione: ${error instanceof Error ? error.message : 'Sconosciuto'}`);
-          } finally {
-              if (event.target) event.target.value = '';
-          }
-      };
-      reader.onerror = () => alert("Errore durante la lettura del file.");
-      reader.readAsText(file);
-  };
-
   const FormComponent = () => { /* ... Form implementation remains the same ... */ 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -415,7 +366,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
     return clients.reduce((acc, client) => {
         const clientProjects = projectsByClient.get(client.id) || [];
-        if (clientProjects.length > 0 && clientProjects.every(p => p.paymentStatus === PaymentStatus.Pagato)) {
+        if (clientProjects.length > 0 && clientProjects.every(p => p.paymentStatus === PaymentStatus.Pagato && p.workStatus === WorkStatus.Consegnato)) {
             acc.add(client.id);
         }
         return acc;
@@ -440,9 +391,14 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
                 <h1 className="text-2xl font-bold ml-2">Progetta</h1>
             </div>
-            <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Cambia tema">
-                {theme === 'light' ? <MoonIcon className="w-5 h-5"/> : <SunIcon className="w-5 h-5"/>}
-            </button>
+            <div className="flex items-center gap-2">
+                <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Cambia tema">
+                    {theme === 'light' ? <MoonIcon className="w-5 h-5"/> : <SunIcon className="w-5 h-5"/>}
+                </button>
+                 <button onClick={onLogout} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Esci">
+                    <LogOutIcon className="w-5 h-5"/>
+                </button>
+            </div>
         </div>
         <nav className="flex-grow overflow-y-auto">
             <ul>
@@ -457,21 +413,14 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                             <UsersIcon className="w-4 h-4 mr-3 flex-shrink-0"/> 
                             <span className="truncate">{client.name}</span>
                         </div>
-                        <button onClick={e => { e.stopPropagation(); handleDeleteClient(client.id); }} className="text-gray-400 hover:text-red-500 ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" aria-label={`Elimina ${client.name}`}><TrashIcon className="w-4 h-4" /></button>
                     </li>
                 ))}
             </ul>
         </nav>
         <div className="space-y-2 mt-4 flex-shrink-0">
             <button onClick={() => openModal('client')} className="w-full bg-accent text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-opacity-80 transition-opacity"><PlusIcon className="w-5 h-5 mr-2"/> Nuovo Cliente</button>
-            <hr className="!my-4 border-gray-700" />
-            <input type="file" ref={fileInputRef} onChange={handleFileImport} style={{ display: 'none' }} accept=".json" />
-            <button onClick={handleImportClick} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-gray-500 transition-colors text-sm"><UploadIcon className="w-4 h-4 mr-2"/> Importa</button>
-            <button onClick={handleExportData} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-gray-500 transition-colors text-sm"><DownloadIcon className="w-4 h-4 mr-2"/> Esporta</button>
-            <hr className="!my-4 border-gray-700" />
-            <button onClick={onLogout} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-red-500 transition-colors"><LogOutIcon className="w-5 h-5 mr-2"/> Esci</button>
         </div>
-        <div className="mt-auto pt-4 text-center text-xs text-gray-400 flex-shrink-0">v1.3.0-perf</div>
+        <div className="mt-auto pt-4 text-center text-xs text-gray-400 flex-shrink-0">v1.4.0</div>
       </aside>
 
       <main className="flex-1 p-8 overflow-y-auto">
@@ -502,6 +451,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 onDuplicateProject={handleDuplicateProject}
                 onDeleteTodo={handleDeleteTodo}
                 onUpdateProjectNotes={handleUpdateProjectNotes}
+                onDeleteClient={handleDeleteClient}
             />
         )}
       </main>
