@@ -92,6 +92,48 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
     setCurrentContextId(contextId);
     setIsModalOpen(true);
   };
+  
+  // Drag and drop handlers for client reordering
+  const handleDragStart = (e: React.DragEvent<HTMLLIElement>, index: number) => {
+    e.dataTransfer.setData("clientIndex", index.toString());
+    e.currentTarget.classList.add('opacity-50', 'bg-primary');
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLLIElement>) => {
+    e.preventDefault(); // Necessary to allow dropping
+  };
+  
+  const handleDragEnter = (e: React.DragEvent<HTMLLIElement>) => {
+    e.preventDefault();
+    if (!e.currentTarget.classList.contains('bg-primary')) {
+        e.currentTarget.classList.add('bg-gray-700');
+    }
+  }
+  
+  const handleDragLeave = (e: React.DragEvent<HTMLLIElement>) => {
+    e.currentTarget.classList.remove('bg-gray-700');
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLLIElement>, dropIndex: number) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('bg-gray-700');
+    const dragIndexStr = e.dataTransfer.getData("clientIndex");
+    if (dragIndexStr === "") return;
+    
+    const dragIndex = parseInt(dragIndexStr, 10);
+    if (dragIndex === dropIndex) return;
+
+    const reorderedClients = [...clients];
+    const [draggedClient] = reorderedClients.splice(dragIndex, 1);
+    reorderedClients.splice(dropIndex, 0, draggedClient);
+
+    setClients(reorderedClients);
+  };
+  
+  const handleDragEnd = (e: React.DragEvent<HTMLLIElement>) => {
+    e.currentTarget.classList.remove('opacity-50', 'bg-primary');
+  };
+
 
   const FormComponent = () => {
     const [name, setName] = useState('');
@@ -239,9 +281,16 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
             </ul>
             <h2 className="text-sm font-semibold text-gray-400 mt-6 mb-2 px-3 uppercase">Clienti</h2>
             <ul>
-                {clients.map(client => (
+                {clients.map((client, index) => (
                     <li key={client.id}
-                        className={`group flex items-center justify-between p-3 rounded-lg cursor-pointer mb-1 transition-colors text-sm ${selectedView === client.id ? 'bg-primary' : 'hover:bg-gray-700'}`}>
+                        draggable="true"
+                        onDragStart={(e) => handleDragStart(e, index)}
+                        onDragOver={handleDragOver}
+                        onDragEnter={handleDragEnter}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, index)}
+                        onDragEnd={handleDragEnd}
+                        className={`group flex items-center justify-between p-3 rounded-lg cursor-grab mb-1 transition-colors text-sm ${selectedView === client.id ? 'bg-primary' : 'hover:bg-gray-700'}`}>
                         <div className="flex items-center flex-1 min-w-0" onClick={() => setSelectedView(client.id)}>
                             <UsersIcon className="w-4 h-4 mr-3 flex-shrink-0"/> 
                             <span className="truncate">{client.name}</span>
