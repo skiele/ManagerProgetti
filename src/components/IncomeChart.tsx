@@ -1,6 +1,5 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Client, Project, Todo, WorkStatus, PaymentStatus } from '../types';
 
 interface ChartData {
   name: string;
@@ -10,83 +9,14 @@ interface ChartData {
 }
 
 interface IncomeChartProps {
-  clients: Client[];
-  projects: Project[];
-  todos: Todo[];
+  data: ChartData[];
 }
 
-const IncomeChart: React.FC<IncomeChartProps> = ({ clients, projects, todos }) => {
-
-  // --- OTTIMIZZAZIONE PERFORMANCE ---
-  // 1. Calcola i totali dei to-do una sola volta
-  const todoTotalsByProject = useMemo(() => {
-    const map = new Map<string, number>();
-    todos.forEach(todo => {
-      map.set(todo.projectId, (map.get(todo.projectId) || 0) + todo.income);
-    });
-    return map;
-  }, [todos]);
-
-  // 2. Calcola i totali dei progetti una sola volta
-  const projectTotals = useMemo(() => {
-    const map = new Map<string, number>();
-    projects.forEach(p => {
-      const tasksTotal = todoTotalsByProject.get(p.id) || 0;
-      map.set(p.id, p.value + tasksTotal);
-    });
-    return map;
-  }, [projects, todoTotalsByProject]);
-
-  // 3. Raggruppa i progetti per cliente una sola volta
-  const projectsByClient = useMemo(() => {
-    const map = new Map<string, Project[]>();
-    projects.forEach(p => {
-      if (!map.has(p.clientId)) {
-        map.set(p.clientId, []);
-      }
-      map.get(p.clientId)!.push(p);
-    });
-    return map;
-  }, [projects]);
-
-  // 4. Calcola i dati finali del grafico basandosi sulle mappe pre-calcolate
-  const data = useMemo(() => {
-    const chartData = clients.map(client => {
-      const clientProjects = projectsByClient.get(client.id) || [];
-      let incassati = 0;
-      let futuri = 0;
-      let potenziali = 0;
-
-      clientProjects.forEach(p => {
-        if (p.workStatus === WorkStatus.Annullato) return;
-
-        const projectTotal = projectTotals.get(p.id) || 0;
-
-        if (p.paymentStatus === PaymentStatus.Pagato) {
-          incassati += projectTotal;
-        } else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) {
-          futuri += projectTotal;
-        } else if (p.workStatus === WorkStatus.PreventivoDaInviare || p.workStatus === WorkStatus.PreventivoInviato) {
-          potenziali += projectTotal;
-        }
-      });
-
-      return {
-        name: client.name,
-        incassati,
-        futuri,
-        potenziali,
-      };
-    }).filter(d => d.incassati > 0 || d.futuri > 0 || d.potenziali > 0);
-
-    return chartData;
-  }, [clients, projectsByClient, projectTotals]);
-
-
+const IncomeChart: React.FC<IncomeChartProps> = ({ data }) => {
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 bg-gray-100 dark:bg-gray-800 rounded-lg">
-        <p className="text-gray-500">Nessun dato economico da visualizzare. Aggiungi progetti e incassi.</p>
+        <p className="text-gray-500">Nessun dato economico da visualizzare per i filtri selezionati.</p>
       </div>
     );
   }
@@ -103,21 +33,21 @@ const IncomeChart: React.FC<IncomeChartProps> = ({ clients, projects, todos }) =
         }}
       >
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(128, 128, 128, 0.2)" />
-        <XAxis dataKey="name" stroke="#888888" />
-        <YAxis stroke="#888888" />
+        <XAxis dataKey="name" stroke="currentColor" fontSize={12} tickLine={false} axisLine={false} />
+        <YAxis stroke="currentColor" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `€${value}`} />
         <Tooltip
           contentStyle={{ 
-            backgroundColor: 'rgba(30, 30, 30, 0.8)', 
+            backgroundColor: 'rgba(30, 30, 30, 0.9)', 
             borderColor: '#555',
             color: '#fff',
             borderRadius: '0.5rem'
           }}
           formatter={(value: number) => `€${value.toLocaleString('it-IT')}`}
         />
-        <Legend />
-        <Bar dataKey="incassati" fill="#22c55e" name="Incassati" />
-        <Bar dataKey="futuri" fill="#3b82f6" name="Incassi Futuri" />
-        <Bar dataKey="potenziali" fill="#f97316" name="Incassi Potenziali" />
+        <Legend wrapperStyle={{fontSize: "14px"}}/>
+        <Bar dataKey="incassati" fill="#22c55e" name="Incassati" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="futuri" fill="#3b82f6" name="Incassi Futuri" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="potenziali" fill="#f97316" name="Incassi Potenziali" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

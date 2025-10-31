@@ -1,15 +1,19 @@
 import React from 'react';
-import { Client, Project, Todo } from '../types';
 import IncomeChart from './IncomeChart';
 import { formatCurrency } from '../utils/formatting';
+
+interface ChartData {
+  name: string;
+  incassati: number;
+  futuri: number;
+  potenziali: number;
+}
 
 interface DashboardProps {
     collectedIncome: number;
     futureIncome: number;
     potentialIncome: number;
-    clients: Client[];
-    projects: Project[];
-    todos: Todo[];
+    chartData: ChartData[];
     filterYear: string;
     setFilterYear: (year: string) => void;
     filterMonth: string;
@@ -17,16 +21,26 @@ interface DashboardProps {
     availableYears: string[];
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ collectedIncome, futureIncome, potentialIncome, clients, projects, todos, filterYear, setFilterYear, filterMonth, setFilterMonth, availableYears }) => (
+const Dashboard: React.FC<DashboardProps> = ({ 
+    collectedIncome, 
+    futureIncome, 
+    potentialIncome, 
+    chartData,
+    filterYear, 
+    setFilterYear, 
+    filterMonth, 
+    setFilterMonth, 
+    availableYears 
+}) => (
     <div>
         <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
             <div className="flex gap-4 mb-6">
-                <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="p-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+                <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="p-2 border rounded bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600">
                     <option value="all">Tutti gli anni</option>
                     {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
                 </select>
-                <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="p-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+                <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="p-2 border rounded bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600">
                     <option value="all">Tutti i mesi</option>
                     {Array.from({ length: 12 }, (_, i) => (
                         <option key={i + 1} value={String(i + 1)}>{new Date(0, i).toLocaleString('it-IT', { month: 'long' })}</option>
@@ -50,7 +64,7 @@ const Dashboard: React.FC<DashboardProps> = ({ collectedIncome, futureIncome, po
         </div>
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
             <h3 className="text-xl font-bold mb-4">Incassi per Cliente</h3>
-            <IncomeChart clients={clients} projects={projects} todos={todos} />
+            <IncomeChart data={chartData} />
         </div>
     </div>
 );

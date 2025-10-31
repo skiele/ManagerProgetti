@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
-import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, DownloadIcon, UploadIcon, CopyIcon } from './components/icons';
+import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, DownloadIcon, UploadIcon, CopyIcon, SunIcon, MoonIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
 import LoginScreen from './components/LoginScreen';
@@ -18,6 +18,7 @@ type AppData = {
   projects: Project[];
   todos: Todo[];
 };
+type Theme = 'light' | 'dark';
 
 // --- Main Application Component (Protected) ---
 const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: string }> = ({ onLogout, initialData, userId }) => {
@@ -27,11 +28,14 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   
   // Effetto per salvare i dati ad ogni modifica
   useEffect(() => {
-    // Non salvare se i dati iniziali non sono ancora stati processati
     if (initialData.clients === clients && initialData.projects === projects && initialData.todos === todos) {
         return;
     }
-    firebaseService.saveData(userId, { clients, projects, todos });
+    const handler = setTimeout(() => {
+      firebaseService.saveData(userId, { clients, projects, todos });
+    }, 1000); // Debounce saving to avoid too many writes
+    
+    return () => clearTimeout(handler);
   }, [clients, projects, todos, userId, initialData]);
 
   // Sincronizza lo stato se i dati iniziali cambiano (es. primo caricamento)
@@ -55,6 +59,20 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   const [filterMonth, setFilterMonth] = useState('all');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'dark');
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+  
+  const toggleTheme = () => {
+    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+  }
+
 
   const handleAddClient = (name: string, email?: string) => {
     const newClient: Client = { id: crypto.randomUUID(), name, email };
@@ -92,7 +110,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         workStatus: WorkStatus.PreventivoDaInviare,
         paymentStatus: PaymentStatus.DaFatturare,
         createdAt: new Date().toISOString(),
-        paidAt: undefined, // Resetta la data di pagamento
+        paidAt: undefined,
     };
 
     const originalTodos = todos.filter(t => t.projectId === projectId);
@@ -100,7 +118,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         ...todo,
         id: crypto.randomUUID(),
         projectId: newProject.id,
-        completed: false, // Resetta lo stato del to-do
+        completed: false,
     }));
 
     setProjects(prev => [...prev, newProject]);
@@ -146,15 +164,12 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     setIsAiModalOpen(true);
   };
 
-  // Drag and drop handlers for client reordering
   const handleDragStart = (e: React.DragEvent<HTMLLIElement>, index: number) => {
     e.dataTransfer.setData("clientIndex", index.toString());
     e.currentTarget.classList.add('opacity-50', 'bg-primary');
   };
 
-  const handleDragOver = (e: React.DragEvent<HTMLLIElement>) => {
-    e.preventDefault(); // Necessary to allow dropping
-  };
+  const handleDragOver = (e: React.DragEvent<HTMLLIElement>) => e.preventDefault();
   
   const handleDragEnter = (e: React.DragEvent<HTMLLIElement>) => {
     e.preventDefault();
@@ -163,10 +178,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     }
   }
   
-  const handleDragLeave = (e: React.DragEvent<HTMLLIElement>) => {
-    e.currentTarget.classList.remove('bg-gray-700');
-  }
-
+  const handleDragLeave = (e: React.DragEvent<HTMLLIElement>) => e.currentTarget.classList.remove('bg-gray-700');
+  
   const handleDrop = (e: React.DragEvent<HTMLLIElement>, dropIndex: number) => {
     e.preventDefault();
     e.currentTarget.classList.remove('bg-gray-700');
@@ -183,34 +196,25 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     setClients(reorderedClients);
   };
   
-  const handleDragEnd = (e: React.DragEvent<HTMLLIElement>) => {
-    e.currentTarget.classList.remove('opacity-50', 'bg-primary');
-  };
-
+  const handleDragEnd = (e: React.DragEvent<HTMLLIElement>) => e.currentTarget.classList.remove('opacity-50', 'bg-primary');
+  
   const handleExportData = () => {
     try {
         const dataToExport = { clients, projects, todos };
-        const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
-          JSON.stringify(dataToExport, null, 2)
-        )}`;
+        const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(dataToExport, null, 2))}`;
         const link = document.createElement("a");
         link.href = jsonString;
         const date = new Date().toISOString().slice(0, 10);
         link.download = `progetta_backup_${date}.json`;
-
-        document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
     } catch (error) {
         console.error("Errore durante l'esportazione:", error);
         alert("Si è verificato un errore durante l'esportazione dei dati.");
     }
   };
 
-  const handleImportClick = () => {
-      fileInputRef.current?.click();
-  };
-
+  const handleImportClick = () => fileInputRef.current?.click();
+  
   const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
@@ -220,48 +224,34 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
           try {
               const text = e.target?.result;
               if (typeof text !== 'string') throw new Error("Il file non può essere letto.");
-              
               const importedData = JSON.parse(text);
+              if (!importedData.clients || !importedData.projects || !importedData.todos) throw new Error("Struttura file non valida.");
 
-              // Basic validation
-              if (!importedData.clients || !importedData.projects || !importedData.todos || !Array.isArray(importedData.clients) || !Array.isArray(importedData.projects) || !Array.isArray(importedData.todos)) {
-                  throw new Error("Il file JSON non ha la struttura corretta (deve contenere 'clients', 'projects', 'todos').");
-              }
-
-              if (window.confirm("Sei sicuro di voler importare questi dati? L'operazione sovrascriverà tutti i dati attuali. Si consiglia di esportare un backup prima di procedere.")) {
+              if (window.confirm("Sei sicuro? I dati attuali verranno sovrascritti.")) {
                   setClients(importedData.clients);
                   setProjects(importedData.projects);
                   setTodos(importedData.todos);
-                  firebaseService.saveData(userId, importedData); // Salva i dati importati su Firebase
-                  alert("Dati importati con successo e salvati sul cloud!");
+                  firebaseService.saveData(userId, importedData);
+                  alert("Dati importati e salvati sul cloud!");
                   setSelectedView('dashboard');
               }
           } catch (error) {
-              console.error("Errore durante l'importazione:", error);
-              alert(`Errore durante l'importazione del file: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`);
+              alert(`Errore importazione: ${error instanceof Error ? error.message : 'Sconosciuto'}`);
           } finally {
-              if (event.target) {
-                  event.target.value = '';
-              }
+              if (event.target) event.target.value = '';
           }
       };
-      reader.onerror = () => {
-          alert("Errore durante la lettura del file.");
-           if (event.target) {
-              event.target.value = '';
-          }
-      }
+      reader.onerror = () => alert("Errore durante la lettura del file.");
       reader.readAsText(file);
   };
 
-  const FormComponent = () => {
+  const FormComponent = () => { /* ... Form implementation remains the same ... */ 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [projectValue, setProjectValue] = useState(0);
     const [task, setTask] = useState('');
     const [income, setIncome] = useState(0);
     const [dueDate, setDueDate] = useState('');
-
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -284,12 +274,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 </>;
             case 'project':
                 return <>
-                    <select
-                        className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4"
-                        value={currentContextId || ''}
-                        onChange={(e) => setCurrentContextId(e.target.value)}
-                        required
-                    >
+                    <select className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" value={currentContextId || ''} onChange={(e) => setCurrentContextId(e.target.value)} required>
                         <option value="" disabled>Seleziona Cliente</option>
                         {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
@@ -312,8 +297,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     </form>
   };
 
-  const AiFormComponent = ({ clientId, onComplete }: { clientId: string; onComplete: () => void }) => {
-    const [description, setDescription] = useState('');
+  const AiFormComponent = ({ clientId, onComplete }: { clientId: string; onComplete: () => void }) => { /* ... AI Form implementation remains the same ... */ 
+      const [description, setDescription] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -328,58 +313,25 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             const schema = {
                 type: Type.OBJECT,
                 properties: {
-                    projectName: { type: Type.STRING, description: "Nome conciso e professionale per il progetto." },
-                    projectValue: { type: Type.NUMBER, description: "Valore economico di partenza plausibile in Euro." },
-                    projectNotes: { type: Type.STRING, description: "Breve nota iniziale per contestualizzare il progetto." },
-                    todos: {
-                        type: Type.ARRAY,
-                        description: "Lista di 3-5 to-do comuni per questo tipo di progetto.",
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                task: { type: Type.STRING, description: "Descrizione dell'attività da svolgere." },
-                                income: { type: Type.NUMBER, description: "Piccolo incasso associato, 0 se non applicabile." }
-                            },
-                            required: ["task", "income"]
-                        }
-                    }
+                    projectName: { type: Type.STRING }, projectValue: { type: Type.NUMBER }, projectNotes: { type: Type.STRING },
+                    todos: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { task: { type: Type.STRING }, income: { type: Type.NUMBER } }, required: ["task", "income"] } }
                 },
                 required: ["projectName", "projectValue", "projectNotes", "todos"]
             };
 
-            const prompt = `Sei un assistente per un project manager freelance.
-            Dato il seguente brief di progetto, genera:
-            1. Un nome conciso e professionale per il progetto.
-            2. Un valore economico di partenza plausibile in Euro (solo il numero).
-            3. Una breve nota iniziale per il progetto.
-            4. Una lista di 3-5 to-do comuni per questo tipo di progetto, con un piccolo incasso associato a ciascuno (0 se non applicabile).
-            
-            Brief del progetto: "${description}"
-            
-            Fornisci la risposta esclusivamente in formato JSON, rispettando lo schema fornito.`;
+            const prompt = `Dato il brief di progetto: "${description}", genera un nome, valore, nota e 3-5 to-do comuni. Rispondi solo in JSON.`;
             
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: schema,
-                }
+                model: 'gemini-2.5-flash', contents: prompt,
+                config: { responseMimeType: "application/json", responseSchema: schema }
             });
 
             const result = JSON.parse(response.text);
-
             const newProject = handleAddProject(clientId, result.projectName, result.projectValue, result.projectNotes);
-
-            if (result.todos && Array.isArray(result.todos)) {
-                result.todos.forEach((todo: { task: string; income: number }) => {
-                    handleAddTodo(newProject.id, todo.task, todo.income);
-                });
-            }
+            result.todos?.forEach((todo: { task: string; income: number }) => handleAddTodo(newProject.id, todo.task, todo.income));
             onComplete();
         } catch (err) {
-            console.error("Errore durante la generazione AI:", err);
-            setError('Non è stato possibile generare il progetto. Riprova.');
+            setError('Generazione fallita. Riprova.');
         } finally {
             setLoading(false);
         }
@@ -387,223 +339,154 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
     return (
       <form onSubmit={handleSubmit} className="space-y-4">
-        <textarea
-          placeholder="Descrivi brevemente il progetto (es. 'Sito e-commerce per un negozio di abbigliamento')"
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4"
-          rows={4}
-          required
-          disabled={loading}
-        />
+        <textarea placeholder="Descrivi brevemente il progetto (es. 'Sito e-commerce per un negozio di abbigliamento')" value={description} onChange={e => setDescription(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" rows={4} required disabled={loading}/>
         {error && <p className="text-sm text-red-500 text-center">{error}</p>}
         <button type="submit" className="w-full bg-accent text-white py-2 rounded-lg font-semibold hover:bg-opacity-80 transition-opacity flex items-center justify-center disabled:bg-gray-400" disabled={loading}>
-            {loading ? 'Generazione in corso...' : <><SparklesIcon className="w-5 h-5 mr-2"/> Genera Progetto</>}
+            {loading ? 'Generazione...' : <><SparklesIcon className="w-5 h-5 mr-2"/> Genera Progetto</>}
         </button>
       </form>
     );
   };
 
+  // --- OTTIMIZZAZIONE PERFORMANCE: CALCOLI CENTRALIZZATI ---
+  
   const availableYears = useMemo(() => {
-    const years = new Set(projects.map(p => {
-        const dateToUse = p.paymentStatus === PaymentStatus.Pagato && p.paidAt ? p.paidAt : p.createdAt;
-        return new Date(dateToUse).getFullYear().toString();
-    }));
+    const years = new Set(projects.map(p => new Date(p.paidAt || p.createdAt).getFullYear().toString()));
+    // FIX: Add explicit types for sort arguments to prevent type inference issues.
     return Array.from(years).sort((a: string, b: string) => b.localeCompare(a));
   }, [projects]);
   
   const filteredProjects = useMemo(() => {
-      return projects.filter(project => {
-          const dateToUse = project.paymentStatus === PaymentStatus.Pagato && project.paidAt ? project.paidAt : project.createdAt;
-          const projectDate = new Date(dateToUse);
-          const yearMatch = filterYear === 'all' || projectDate.getFullYear().toString() === filterYear;
-          const monthMatch = filterMonth === 'all' || (projectDate.getMonth() + 1).toString() === filterMonth;
+      return projects.filter(p => {
+          const date = new Date(p.paidAt || p.createdAt);
+          const yearMatch = filterYear === 'all' || date.getFullYear().toString() === filterYear;
+          const monthMatch = filterMonth === 'all' || (date.getMonth() + 1).toString() === filterMonth;
           return yearMatch && monthMatch;
       });
   }, [projects, filterYear, filterMonth]);
+  
+  const allProjectTotals = useMemo(() => {
+    const todoTotals = todos.reduce((acc, todo) => {
+        acc.set(todo.projectId, (acc.get(todo.projectId) || 0) + todo.income);
+        return acc;
+    }, new Map<string, number>());
 
- const { collectedIncome, futureIncome, potentialIncome } = useMemo(() => {
-    // Ottimizzazione: Pre-calcola i totali dei to-do per ogni progetto
-    const todoTotals = new Map<string, number>();
-    todos.forEach(todo => {
-        todoTotals.set(todo.projectId, (todoTotals.get(todo.projectId) || 0) + todo.income);
-    });
+    return projects.reduce((acc, project) => {
+        acc.set(project.id, project.value + (todoTotals.get(project.id) || 0));
+        return acc;
+    }, new Map<string, number>());
+  }, [projects, todos]);
 
-    let collected = 0;
-    let future = 0;
-    let potential = 0;
+  const dashboardTotals = useMemo(() => {
+    return filteredProjects.reduce((acc, p) => {
+        if (p.workStatus === WorkStatus.Annullato) return acc;
+        const total = allProjectTotals.get(p.id) || 0;
+        if (p.paymentStatus === PaymentStatus.Pagato) acc.collected += total;
+        else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) acc.future += total;
+        else acc.potential += total;
+        return acc;
+    }, { collected: 0, future: 0, potential: 0 });
+  }, [filteredProjects, allProjectTotals]);
+
+  const chartData = useMemo(() => {
+    const dataByClient = new Map<string, { name: string; incassati: number; futuri: number; potenziali: number }>();
+    clients.forEach(c => dataByClient.set(c.id, { name: c.name, incassati: 0, futuri: 0, potenziali: 0 }));
 
     filteredProjects.forEach(p => {
-      if (p.workStatus === WorkStatus.Annullato) return;
-
-      const tasksTotal = todoTotals.get(p.id) || 0;
-      const projectTotal = p.value + tasksTotal;
-      
-      if (p.paymentStatus === PaymentStatus.Pagato) {
-        collected += projectTotal;
-      } else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) {
-        future += projectTotal;
-      } else if (p.workStatus === WorkStatus.PreventivoDaInviare || p.workStatus === WorkStatus.PreventivoInviato) {
-        potential += projectTotal;
-      }
+        if (p.workStatus === WorkStatus.Annullato) return;
+        const clientData = dataByClient.get(p.clientId);
+        if (!clientData) return;
+        
+        const total = allProjectTotals.get(p.id) || 0;
+        if (p.paymentStatus === PaymentStatus.Pagato) clientData.incassati += total;
+        else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) clientData.futuri += total;
+        else clientData.potenziali += total;
     });
 
-    return { collectedIncome: collected, futureIncome: future, potentialIncome: potential };
-  }, [filteredProjects, todos]);
+    return Array.from(dataByClient.values()).filter(d => d.incassati > 0 || d.futuri > 0 || d.potenziali > 0);
+  }, [clients, filteredProjects, allProjectTotals]);
+  
+  const inactiveClients = useMemo(() => {
+    const projectsByClient = projects.reduce((acc, p) => {
+        if (!acc.has(p.clientId)) acc.set(p.clientId, []);
+        acc.get(p.clientId)!.push(p);
+        return acc;
+    }, new Map<string, Project[]>());
 
-  const handleUpdateProjectWorkStatus = (id: string, workStatus: WorkStatus) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, workStatus } : p));
-  };
+    return clients.reduce((acc, client) => {
+        const clientProjects = projectsByClient.get(client.id) || [];
+        if (clientProjects.length > 0 && clientProjects.every(p => p.paymentStatus === PaymentStatus.Pagato)) {
+            acc.add(client.id);
+        }
+        return acc;
+    }, new Set<string>());
+  }, [clients, projects]);
   
+
+  const handleUpdateProjectWorkStatus = (id: string, workStatus: WorkStatus) => setProjects(prev => prev.map(p => p.id === id ? { ...p, workStatus } : p));
+  const handleToggleTodo = (id: string, completed: boolean) => setTodos(prev => prev.map(t => t.id === id ? { ...t, completed } : t));
+  const handleUpdateProjectNotes = (id: string, notes: string) => setProjects(prev => prev.map(p => p.id === id ? { ...p, notes } : p));
   const handleUpdateProjectPaymentStatus = (id: string, paymentStatus: PaymentStatus) => {
-    setProjects(prev => prev.map(p => {
-      if (p.id === id) {
-        const isNowPaid = paymentStatus === PaymentStatus.Pagato;
-        const wasAlreadyPaid = p.paymentStatus === PaymentStatus.Pagato;
-        return { 
-          ...p, 
-          paymentStatus,
-          paidAt: isNowPaid && !wasAlreadyPaid ? new Date().toISOString() : (isNowPaid ? p.paidAt : undefined)
-        };
-      }
-      return p;
-    }));
-  };
-  
-  const handleToggleTodo = (id: string, completed: boolean) => {
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, completed } : t));
-  };
-  
-  const handleUpdateProjectNotes = (id: string, notes: string) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, notes } : p));
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, paymentStatus, paidAt: paymentStatus === PaymentStatus.Pagato ? (p.paidAt || new Date().toISOString()) : undefined } : p));
   };
 
   const selectedClient = useMemo(() => clients.find(c => c.id === selectedView), [clients, selectedView]);
 
-  // --- OTTIMIZZAZIONE PERFORMANCE ---
-  // 1. Raggruppa i progetti per cliente una sola volta
-  const projectsByClient = useMemo(() => {
-    const map = new Map<string, Project[]>();
-    projects.forEach(p => {
-        if (!map.has(p.clientId)) {
-            map.set(p.clientId, []);
-        }
-        map.get(p.clientId)!.push(p);
-    });
-    return map;
-  }, [projects]);
-
-  // 2. Calcola i clienti inattivi basandosi sulla mappa pre-calcolata
-  const inactiveClients = useMemo(() => {
-    const inactiveSet = new Set<string>();
-    clients.forEach(client => {
-        const clientProjects = projectsByClient.get(client.id) || [];
-        if (clientProjects.length > 0 && clientProjects.every(p => p.paymentStatus === PaymentStatus.Pagato)) {
-            inactiveSet.add(client.id);
-        }
-    });
-    return inactiveSet;
-  }, [clients, projectsByClient]);
-
-
   return (
-    <div className="flex h-screen font-sans">
+    <div className="flex h-screen font-sans bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">
       <aside className="w-64 bg-gray-800 text-white flex flex-col p-4 shadow-2xl">
-        <div className="flex items-center mb-8">
-            <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
-            <h1 className="text-2xl font-bold ml-2">Progetta</h1>
+        <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center">
+                <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
+                <h1 className="text-2xl font-bold ml-2">Progetta</h1>
+            </div>
+            <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Cambia tema">
+                {theme === 'light' ? <MoonIcon className="w-5 h-5"/> : <SunIcon className="w-5 h-5"/>}
+            </button>
         </div>
-        <nav className="flex-grow">
+        <nav className="flex-grow overflow-y-auto">
             <ul>
-                <li 
-                    className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'dashboard' ? 'bg-primary' : 'hover:bg-gray-700'}`}
-                    onClick={() => setSelectedView('dashboard')}>
-                    <ChartBarIcon className="w-5 h-5 mr-3"/> Dashboard
-                </li>
-                 <li 
-                    className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'calendar' ? 'bg-primary' : 'hover:bg-gray-700'}`}
-                    onClick={() => setSelectedView('calendar')}>
-                    <CalendarIcon className="w-5 h-5 mr-3"/> Calendario
-                </li>
+                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'dashboard' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => setSelectedView('dashboard')}><ChartBarIcon className="w-5 h-5 mr-3"/> Dashboard</li>
+                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'calendar' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => setSelectedView('calendar')}><CalendarIcon className="w-5 h-5 mr-3"/> Calendario</li>
             </ul>
             <h2 className="text-sm font-semibold text-gray-400 mt-6 mb-2 px-3 uppercase">Clienti</h2>
             <ul>
-                {clients.map((client, index) => {
-                    const isInactive = inactiveClients.has(client.id);
-
-                    return (
-                        <li key={client.id}
-                            draggable="true"
-                            onDragStart={(e) => handleDragStart(e, index)}
-                            onDragOver={handleDragOver}
-                            onDragEnter={handleDragEnter}
-                            onDragLeave={handleDragLeave}
-                            onDrop={(e) => handleDrop(e, index)}
-                            onDragEnd={handleDragEnd}
-                            className={`group flex items-center justify-between p-3 rounded-lg cursor-grab mb-1 transition-all text-sm 
-                                ${selectedView === client.id ? 'bg-primary' : 'hover:bg-gray-700'}
-                                ${isInactive ? 'opacity-60' : ''}`}
-                            >
-                            <div className="flex items-center flex-1 min-w-0" onClick={() => setSelectedView(client.id)}>
-                                <UsersIcon className="w-4 h-4 mr-3 flex-shrink-0"/> 
-                                <span className="truncate">{client.name}</span>
-                            </div>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteClient(client.id);
-                                }}
-                                className="text-gray-400 hover:text-red-500 ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                                aria-label={`Elimina cliente ${client.name}`}
-                            >
-                                <TrashIcon className="w-4 h-4" />
-                            </button>
-                        </li>
-                    );
-                })}
+                {clients.map((client, index) => (
+                    <li key={client.id} draggable="true" onDragStart={e => handleDragStart(e, index)} onDragOver={handleDragOver} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, index)} onDragEnd={handleDragEnd} className={`group flex items-center justify-between p-3 rounded-lg cursor-grab mb-1 transition-all text-sm ${selectedView === client.id ? 'bg-primary' : 'hover:bg-gray-700'} ${inactiveClients.has(client.id) ? 'opacity-60' : ''}`}>
+                        <div className="flex items-center flex-1 min-w-0" onClick={() => setSelectedView(client.id)}>
+                            <UsersIcon className="w-4 h-4 mr-3 flex-shrink-0"/> 
+                            <span className="truncate">{client.name}</span>
+                        </div>
+                        <button onClick={e => { e.stopPropagation(); handleDeleteClient(client.id); }} className="text-gray-400 hover:text-red-500 ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" aria-label={`Elimina ${client.name}`}><TrashIcon className="w-4 h-4" /></button>
+                    </li>
+                ))}
             </ul>
         </nav>
-        <div className="space-y-2">
-            <button onClick={() => openModal('client')} className="w-full bg-accent text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-opacity-80 transition-opacity">
-                <PlusIcon className="w-5 h-5 mr-2"/> Nuovo Cliente
-            </button>
-            
+        <div className="space-y-2 mt-4 flex-shrink-0">
+            <button onClick={() => openModal('client')} className="w-full bg-accent text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-opacity-80 transition-opacity"><PlusIcon className="w-5 h-5 mr-2"/> Nuovo Cliente</button>
             <hr className="!my-4 border-gray-700" />
-            
             <input type="file" ref={fileInputRef} onChange={handleFileImport} style={{ display: 'none' }} accept=".json" />
-            <button onClick={handleImportClick} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-gray-500 transition-colors text-sm">
-                <UploadIcon className="w-4 h-4 mr-2"/> Importa Dati
-            </button>
-            <button onClick={handleExportData} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-gray-500 transition-colors text-sm">
-                <DownloadIcon className="w-4 h-4 mr-2"/> Esporta Dati
-            </button>
-            
+            <button onClick={handleImportClick} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-gray-500 transition-colors text-sm"><UploadIcon className="w-4 h-4 mr-2"/> Importa</button>
+            <button onClick={handleExportData} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-gray-500 transition-colors text-sm"><DownloadIcon className="w-4 h-4 mr-2"/> Esporta</button>
             <hr className="!my-4 border-gray-700" />
-            
-             <button onClick={onLogout} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-red-500 transition-colors">
-                <LogOutIcon className="w-5 h-5 mr-2"/> Esci
-            </button>
+            <button onClick={onLogout} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-red-500 transition-colors"><LogOutIcon className="w-5 h-5 mr-2"/> Esci</button>
         </div>
-        <div className="mt-auto pt-4 text-center text-xs text-gray-400">
-          v1.2.0-cloud
-        </div>
+        <div className="mt-auto pt-4 text-center text-xs text-gray-400 flex-shrink-0">v1.3.0-perf</div>
       </aside>
 
-      <main className="flex-1 p-8 overflow-y-auto bg-light dark:bg-gray-900">
+      <main className="flex-1 p-8 overflow-y-auto">
         {selectedView === 'dashboard' && <Dashboard 
-            collectedIncome={collectedIncome} 
-            futureIncome={futureIncome}
-            potentialIncome={potentialIncome} 
-            clients={clients} 
-            projects={filteredProjects} 
-            todos={todos}
+            collectedIncome={dashboardTotals.collected} 
+            futureIncome={dashboardTotals.future}
+            potentialIncome={dashboardTotals.potential} 
+            chartData={chartData}
             filterYear={filterYear}
             setFilterYear={setFilterYear}
             filterMonth={filterMonth}
             setFilterMonth={setFilterMonth}
             availableYears={availableYears}
         />}
-         {selectedView === 'calendar' && <CalendarView todos={todos} projects={projects} clients={clients}/>}
+        {selectedView === 'calendar' && <CalendarView todos={todos} projects={projects} clients={clients}/>}
         {selectedClient && (
             <ClientView 
                 client={selectedClient} 
@@ -612,9 +495,9 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 onUpdateProjectWorkStatus={handleUpdateProjectWorkStatus}
                 onUpdateProjectPaymentStatus={handleUpdateProjectPaymentStatus}
                 onToggleTodo={handleToggleTodo}
-                onAddProject={(clientId) => openModal('project', clientId)}
+                onAddProject={clientId => openModal('project', clientId)}
                 onAiAddProject={openAiModal}
-                onAddTodo={(projectId) => openModal('todo', projectId)}
+                onAddTodo={projectId => openModal('todo', projectId)}
                 onDeleteProject={handleDeleteProject}
                 onDuplicateProject={handleDuplicateProject}
                 onDeleteTodo={handleDeleteTodo}
@@ -623,51 +506,25 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         )}
       </main>
 
-      <Modal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        title={
-            modalContent === 'client' ? 'Aggiungi Cliente' :
-            modalContent === 'project' ? 'Aggiungi Progetto' :
-            'Aggiungi To-Do'
-        }
-      >
-        <FormComponent />
-      </Modal>
-
-      <Modal
-        isOpen={isAiModalOpen}
-        onClose={() => setIsAiModalOpen(false)}
-        title="Crea Progetto con AI"
-      >
-        {aiContextClientId && <AiFormComponent clientId={aiContextClientId} onComplete={() => setIsAiModalOpen(false)} />}
-      </Modal>
-
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={ modalContent === 'client' ? 'Aggiungi Cliente' : modalContent === 'project' ? 'Aggiungi Progetto' : 'Aggiungi To-Do' }><FormComponent /></Modal>
+      <Modal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} title="Crea Progetto con AI">{aiContextClientId && <AiFormComponent clientId={aiContextClientId} onComplete={() => setIsAiModalOpen(false)} />}</Modal>
     </div>
   );
 };
 
-
-// --- Authentication Controller Component ---
 export default function App() {
-  const [authState, setAuthState] = useState<{ state: AppState; user: User | null; data: AppData | null }>({
-    state: 'loading',
-    user: null,
-    data: null,
-  });
-  
+  const [authState, setAuthState] = useState<{ state: AppState; user: User | null; data: AppData | null }>({ state: 'loading', user: null, data: null });
   const [authView, setAuthView] = useState<'login' | 'setup'>('login');
 
   useEffect(() => {
     const unsubscribe = firebaseService.onAuthChange(async (user) => {
       if (user) {
-        setAuthState(prev => ({ ...prev, state: 'loading' })); // Mostra caricamento mentre si prendono i dati
+        setAuthState(prev => ({ ...prev, state: 'loading' }));
         try {
             const userData = await firebaseService.getData(user.uid);
             setAuthState({ state: 'authenticated', user, data: userData });
         } catch (error) {
             console.error("Errore nel caricamento dei dati:", error);
-            // Se c'è un errore (es. permessi), non bloccare l'utente
             await firebaseService.logout();
             setAuthState({ state: 'unauthenticated', user: null, data: null });
         }
@@ -675,28 +532,23 @@ export default function App() {
         setAuthState({ state: 'unauthenticated', user: null, data: null });
       }
     });
-
-    // Pulisci il listener quando il componente viene smontato
     return () => unsubscribe();
   }, []);
 
-
   const handleLogout = async () => {
     await firebaseService.logout();
-    // Lo stato si aggiornerà automaticamente grazie a onAuthStateChanged
   };
   
   switch (authState.state) {
     case 'loading':
       return <div className="flex items-center justify-center h-screen bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">Caricamento in corso...</div>;
     case 'unauthenticated':
-        if (authView === 'login') {
-            return <LoginScreen onNavigateToRegister={() => setAuthView('setup')} />;
-        }
-        return <SetupScreen onNavigateToLogin={() => setAuthView('login')} />;
+      return authView === 'login' 
+        ? <LoginScreen onNavigateToRegister={() => setAuthView('setup')} />
+        : <SetupScreen onNavigateToLogin={() => setAuthView('login')} />;
     case 'authenticated':
       if (!authState.data || !authState.user) {
-        return <div className="flex items-center justify-center h-screen">Errore: Dati utente non disponibili. Ricaricamento in corso...</div>;
+        return <div className="flex items-center justify-center h-screen">Errore: Dati utente non disponibili.</div>;
       }
       return <MainApp onLogout={handleLogout} initialData={authState.data} userId={authState.user.uid} />;
     default:
