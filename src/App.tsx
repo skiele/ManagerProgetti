@@ -422,19 +422,13 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
       });
   }, [projects, filterYear, filterMonth]);
 
-
-  const getProjectTotal = useCallback((projectId: string) => {
-    const project = projects.find(p => p.id === projectId);
-    if (!project) return 0;
-    
-    const tasksTotal = todos
-      .filter(todo => todo.projectId === projectId)
-      .reduce((sum, todo) => sum + todo.income, 0);
-
-    return project.value + tasksTotal;
-  }, [projects, todos]);
-
  const { collectedIncome, futureIncome, potentialIncome } = useMemo(() => {
+    // Ottimizzazione: Pre-calcola i totali dei to-do per ogni progetto
+    const todoTotals = new Map<string, number>();
+    todos.forEach(todo => {
+        todoTotals.set(todo.projectId, (todoTotals.get(todo.projectId) || 0) + todo.income);
+    });
+
     let collected = 0;
     let future = 0;
     let potential = 0;
@@ -442,7 +436,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     filteredProjects.forEach(p => {
       if (p.workStatus === WorkStatus.Annullato) return;
 
-      const projectTotal = getProjectTotal(p.id);
+      const tasksTotal = todoTotals.get(p.id) || 0;
+      const projectTotal = p.value + tasksTotal;
       
       if (p.paymentStatus === PaymentStatus.Pagato) {
         collected += projectTotal;
@@ -454,7 +449,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     });
 
     return { collectedIncome: collected, futureIncome: future, potentialIncome: potential };
-  }, [filteredProjects, getProjectTotal]);
+  }, [filteredProjects, todos]);
 
   const handleUpdateProjectWorkStatus = (id: string, workStatus: WorkStatus) => {
     setProjects(prev => prev.map(p => p.id === id ? { ...p, workStatus } : p));

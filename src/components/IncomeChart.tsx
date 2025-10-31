@@ -18,16 +18,20 @@ interface IncomeChartProps {
 const IncomeChart: React.FC<IncomeChartProps> = ({ clients, projects, todos }) => {
 
   const data = useMemo(() => {
-    // 1. Mappa i totali di ogni progetto per evitare calcoli ripetuti
+    // 1. Ottimizzazione: Raggruppa i totali dei to-do per progetto per evitare cicli annidati.
+    const todoTotalsByProject = new Map<string, number>();
+    todos.forEach(todo => {
+      todoTotalsByProject.set(todo.projectId, (todoTotalsByProject.get(todo.projectId) || 0) + todo.income);
+    });
+
+    // 2. Ottimizzazione: Calcola il valore totale di ogni progetto una sola volta.
     const projectTotals = new Map<string, number>();
     projects.forEach(p => {
-      const tasksTotal = todos
-        .filter(todo => todo.projectId === p.id)
-        .reduce((sum, todo) => sum + todo.income, 0);
+      const tasksTotal = todoTotalsByProject.get(p.id) || 0;
       projectTotals.set(p.id, p.value + tasksTotal);
     });
 
-    // 2. Raggruppa i progetti per cliente per un accesso più rapido
+    // 3. Ottimizzazione: Raggruppa i progetti per cliente per un accesso rapido.
     const projectsByClient = new Map<string, Project[]>();
     projects.forEach(p => {
       if (!projectsByClient.has(p.clientId)) {
@@ -36,7 +40,7 @@ const IncomeChart: React.FC<IncomeChartProps> = ({ clients, projects, todos }) =
       projectsByClient.get(p.clientId)!.push(p);
     });
 
-    // 3. Calcola i dati per il grafico in modo efficiente
+    // 4. Calcola i dati per il grafico in modo efficiente.
     const chartData = clients.map(client => {
       const clientProjects = projectsByClient.get(client.id) || [];
       let incassati = 0;
