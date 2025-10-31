@@ -281,32 +281,42 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
             </ul>
             <h2 className="text-sm font-semibold text-gray-400 mt-6 mb-2 px-3 uppercase">Clienti</h2>
             <ul>
-                {clients.map((client, index) => (
-                    <li key={client.id}
-                        draggable="true"
-                        onDragStart={(e) => handleDragStart(e, index)}
-                        onDragOver={handleDragOver}
-                        onDragEnter={handleDragEnter}
-                        onDragLeave={handleDragLeave}
-                        onDrop={(e) => handleDrop(e, index)}
-                        onDragEnd={handleDragEnd}
-                        className={`group flex items-center justify-between p-3 rounded-lg cursor-grab mb-1 transition-colors text-sm ${selectedView === client.id ? 'bg-primary' : 'hover:bg-gray-700'}`}>
-                        <div className="flex items-center flex-1 min-w-0" onClick={() => setSelectedView(client.id)}>
-                            <UsersIcon className="w-4 h-4 mr-3 flex-shrink-0"/> 
-                            <span className="truncate">{client.name}</span>
-                        </div>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteClient(client.id);
-                            }}
-                            className="text-gray-400 hover:text-red-500 ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                            aria-label={`Elimina cliente ${client.name}`}
-                        >
-                            <TrashIcon className="w-4 h-4" />
-                        </button>
-                    </li>
-                ))}
+                {clients.map((client, index) => {
+                    const clientProjects = projects.filter(p => p.clientId === client.id);
+                    const isInactive = clientProjects.length > 0 && clientProjects.every(
+                        p => p.workStatus === WorkStatus.Consegnato && p.paymentStatus === PaymentStatus.Pagato
+                    );
+
+                    return (
+                        <li key={client.id}
+                            draggable="true"
+                            onDragStart={(e) => handleDragStart(e, index)}
+                            onDragOver={handleDragOver}
+                            onDragEnter={handleDragEnter}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, index)}
+                            onDragEnd={handleDragEnd}
+                            className={`group flex items-center justify-between p-3 rounded-lg cursor-grab mb-1 transition-all text-sm 
+                                ${selectedView === client.id ? 'bg-primary' : 'hover:bg-gray-700'}
+                                ${isInactive ? 'opacity-60' : ''}`}
+                            >
+                            <div className="flex items-center flex-1 min-w-0" onClick={() => setSelectedView(client.id)}>
+                                <UsersIcon className="w-4 h-4 mr-3 flex-shrink-0"/> 
+                                <span className="truncate">{client.name}</span>
+                            </div>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteClient(client.id);
+                                }}
+                                className="text-gray-400 hover:text-red-500 ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                aria-label={`Elimina cliente ${client.name}`}
+                            >
+                                <TrashIcon className="w-4 h-4" />
+                            </button>
+                        </li>
+                    );
+                })}
             </ul>
         </nav>
         <div className="space-y-2">
