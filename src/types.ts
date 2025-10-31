@@ -1,4 +1,3 @@
-
 export enum WorkStatus {
   PreventivoDaInviare = 'preventivo da inviare',
   PreventivoInviato = 'preventivo inviato',
@@ -11,6 +10,12 @@ export enum PaymentStatus {
   DaFatturare = 'da fatturare',
   Fatturato = 'fatturato',
   Pagato = 'pagato',
+}
+
+export enum ProjectPriority {
+  Bassa = 'bassa',
+  Media = 'media',
+  Alta = 'alta',
 }
 
 export interface Client {
@@ -26,6 +31,7 @@ export interface Project {
   value: number;
   workStatus: WorkStatus;
   paymentStatus: PaymentStatus;
+  priority: ProjectPriority;
   createdAt: string;
   notes?: string;
   paidAt?: string;

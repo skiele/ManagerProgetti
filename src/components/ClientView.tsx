@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Client, Project, Todo, WorkStatus, PaymentStatus } from '../types';
+import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
 import { PlusIcon, SparklesIcon, TrashIcon } from './icons';
 import ProjectCard from './ProjectCard';
 
@@ -10,6 +9,7 @@ interface ClientViewProps {
     todos: Todo[];
     onUpdateProjectWorkStatus: (id: string, status: WorkStatus) => void;
     onUpdateProjectPaymentStatus: (id: string, status: PaymentStatus) => void;
+    onUpdateProjectPriority: (id: string, priority: ProjectPriority) => void;
     onToggleTodo: (id: string, completed: boolean) => void;
     onAddProject: (clientId: string) => void;
     onAiAddProject: (clientId: string) => void;
@@ -26,7 +26,8 @@ const ClientView: React.FC<ClientViewProps> = ({
     projects, 
     todos, 
     onUpdateProjectWorkStatus, 
-    onUpdateProjectPaymentStatus, 
+    onUpdateProjectPaymentStatus,
+    onUpdateProjectPriority, 
     onToggleTodo, 
     onAddProject, 
     onAiAddProject, 
@@ -60,6 +61,7 @@ const ClientView: React.FC<ClientViewProps> = ({
                     todos={todos.filter(todo => todo.projectId === project.id)}
                     onUpdateProjectWorkStatus={onUpdateProjectWorkStatus}
                     onUpdateProjectPaymentStatus={onUpdateProjectPaymentStatus}
+                    onUpdateProjectPriority={onUpdateProjectPriority}
                     onToggleTodo={onToggleTodo}
                     onAddTodo={onAddTodo}
                     onDeleteProject={onDeleteProject}

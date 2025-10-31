@@ -1,5 +1,4 @@
-
-import { WorkStatus, PaymentStatus } from '../types';
+import { WorkStatus, PaymentStatus, ProjectPriority } from '../types';
 
 export const workStatusConfig: Record<WorkStatus, { color: string; label: string }> = {
   [WorkStatus.PreventivoDaInviare]: { color: 'bg-gray-500', label: 'Preventivo da Inviare' },
@@ -13,4 +12,10 @@ export const paymentStatusConfig: Record<PaymentStatus, { color: string; label: 
   [PaymentStatus.DaFatturare]: { color: 'bg-indigo-500', label: 'Da Fatturare' },
   [PaymentStatus.Fatturato]: { color: 'bg-teal-500', label: 'Fatturato' },
   [PaymentStatus.Pagato]: { color: 'bg-green-500', label: 'Pagato' },
+};
+
+export const projectPriorityConfig: Record<ProjectPriority, { color: string; label: string }> = {
+  [ProjectPriority.Bassa]: { color: 'bg-gray-500', label: 'Bassa' },
+  [ProjectPriority.Media]: { color: 'bg-green-500', label: 'Media' },
+  [ProjectPriority.Alta]: { color: 'bg-orange-500', label: 'Alta' },
 };

@@ -1,8 +1,7 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
-import { Project, Todo, WorkStatus, PaymentStatus } from '../types';
+import { Project, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
 import { PlusIcon, TrashIcon, CopyIcon } from './icons';
-import { workStatusConfig, paymentStatusConfig } from '../config/status';
+import { workStatusConfig, paymentStatusConfig, projectPriorityConfig } from '../config/status';
 import { formatCurrency } from '../utils/formatting';
 import TodoItem from './TodoItem';
 
@@ -11,6 +10,7 @@ interface ProjectCardProps {
   todos: Todo[];
   onUpdateProjectWorkStatus: (id: string, status: WorkStatus) => void;
   onUpdateProjectPaymentStatus: (id: string, status: PaymentStatus) => void;
+  onUpdateProjectPriority: (id: string, priority: ProjectPriority) => void;
   onToggleTodo: (id: string, completed: boolean) => void;
   onAddTodo: (projectId: string) => void;
   onDeleteProject: (id: string) => void;
@@ -24,6 +24,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   todos, 
   onUpdateProjectWorkStatus, 
   onUpdateProjectPaymentStatus, 
+  onUpdateProjectPriority,
   onToggleTodo, 
   onAddTodo, 
   onDeleteProject,
@@ -57,6 +58,15 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
           </div>
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 flex-shrink-0">
             <div className="flex items-center gap-2">
+               <select 
+                value={project.priority} 
+                onChange={(e) => onUpdateProjectPriority(project.id, e.target.value as ProjectPriority)}
+                className={`text-sm font-medium text-white px-2 py-1 rounded-full border-none focus:ring-2 focus:ring-white/50 appearance-none ${projectPriorityConfig[project.priority].color}`}
+              >
+                {Object.values(ProjectPriority).map(p => (
+                  <option key={p} value={p} className="text-black bg-white dark:bg-gray-700 dark:text-white">{projectPriorityConfig[p].label}</option>
+                ))}
+              </select>
               <select 
                 value={project.workStatus} 
                 onChange={(e) => onUpdateProjectWorkStatus(project.id, e.target.value as WorkStatus)}

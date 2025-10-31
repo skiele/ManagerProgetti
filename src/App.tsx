@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
+import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority } from './types';
 import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
@@ -7,6 +7,7 @@ import LoginScreen from './components/LoginScreen';
 import SetupScreen from './components/SetupScreen';
 import Dashboard from './components/Dashboard';
 import ClientView from './components/ClientView';
+import SettingsView from './components/SettingsView';
 import * as firebaseService from './services/firebaseService';
 import { GoogleGenAI, Type } from '@google/genai';
 import { User } from 'firebase/auth';
@@ -50,8 +51,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   const [filterMonth, setFilterMonth] = useState('all');
   
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'dark');
-  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
-  const settingsMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -59,89 +58,10 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     root.classList.add(theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-        if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target as Node)) {
-            setIsSettingsMenuOpen(false);
-        }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
   
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
   }
-
-  const handleExportData = async () => {
-    setIsSettingsMenuOpen(false);
-    try {
-        const currentCloudData = await firebaseService.getData(userId);
-        if (!currentCloudData || currentCloudData.clients.length === 0) {
-            alert("Non ci sono dati da esportare.");
-            return;
-        }
-        const dataStr = JSON.stringify(currentCloudData, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-        const link = document.createElement('a');
-        const timestamp = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
-        link.download = `progetta_backup_${timestamp}.json`;
-        link.href = url;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    } catch (error) {
-        console.error("Errore durante l'esportazione dei dati:", error);
-        alert("Si è verificato un errore durante l'esportazione. Controlla la console per i dettagli.");
-    }
-  };
-
-  const handleImportData = () => {
-      setIsSettingsMenuOpen(false);
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json';
-      input.onchange = (e) => {
-          const file = (e.target as HTMLInputElement).files?.[0];
-          if (!file) return;
-
-          const reader = new FileReader();
-          reader.onload = async (event) => {
-              try {
-                  const content = event.target?.result;
-                  if (typeof content !== 'string') throw new Error("Contenuto del file non valido.");
-                  
-                  const importedData = JSON.parse(content);
-
-                  if (!('clients' in importedData && 'projects' in importedData && 'todos' in importedData)) {
-                      throw new Error("Il file di backup non è valido o è corrotto.");
-                  }
-
-                  const confirmation = window.confirm(
-                      "ATTENZIONE!\n\nStai per sovrascrivere TUTTI i dati presenti sul cloud con il contenuto di questo file.\n\nQuesta azione è IRREVERSIBILE.\n\nSei assolutamente sicuro di voler procedere?"
-                  );
-
-                  if (confirmation) {
-                      await firebaseService.saveData(userId, importedData);
-                      setClients(importedData.clients);
-                      setProjects(importedData.projects);
-                      setTodos(importedData.todos);
-                      alert("Dati importati e salvati sul cloud con successo!");
-                  }
-              } catch (error) {
-                  console.error("Errore durante l'importazione dei dati:", error);
-                  alert(`Si è verificato un errore durante l'importazione: ${error instanceof Error ? error.message : String(error)}`);
-              }
-          };
-          reader.readAsText(file);
-      };
-      input.click();
-  };
 
   const handleAddClient = (name: string, email?: string) => {
     const newClient: Client = {
@@ -164,6 +84,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
       value,
       workStatus: WorkStatus.PreventivoDaInviare,
       paymentStatus: PaymentStatus.DaFatturare,
+      priority: ProjectPriority.Media,
       createdAt: new Date().toISOString(),
       ...(notes && { notes }),
     };
@@ -417,7 +338,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   
   const availableYears = useMemo(() => {
     const years = new Set(projects.map(p => new Date(p.paidAt || p.createdAt).getFullYear().toString()));
-    // FIX: Add explicit types for sort arguments to prevent type inference issues.
     return Array.from(years).sort((a: string, b: string) => b.localeCompare(a));
   }, [projects]);
   
@@ -486,6 +406,23 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         return acc;
     }, new Set<string>());
   }, [clients, projects]);
+
+  const clientPriorities = useMemo(() => {
+    const priorityOrder = { [ProjectPriority.Bassa]: 1, [ProjectPriority.Media]: 2, [ProjectPriority.Alta]: 3 };
+    const priorities = new Map<string, ProjectPriority>();
+
+    projects.forEach(project => {
+      // Considera attivo un progetto non annullato e non ancora pagato
+      const isActive = project.workStatus !== WorkStatus.Annullato && project.paymentStatus !== PaymentStatus.Pagato;
+      if (isActive) {
+        const currentPriority = priorities.get(project.clientId);
+        if (!currentPriority || priorityOrder[project.priority] > priorityOrder[currentPriority]) {
+          priorities.set(project.clientId, project.priority);
+        }
+      }
+    });
+    return priorities;
+  }, [projects]);
   
 
   const handleUpdateProjectWorkStatus = (id: string, workStatus: WorkStatus) => setProjects(prev => {
@@ -505,22 +442,20 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     saveDataToCloud({ projects: newProjects });
     return newProjects;
   });
+  
+  const handleUpdateProjectPriority = (id: string, priority: ProjectPriority) => setProjects(prev => {
+    const newProjects = prev.map(p => p.id === id ? { ...p, priority } : p);
+    saveDataToCloud({ projects: newProjects });
+    return newProjects;
+  });
 
   const handleUpdateProjectPaymentStatus = (id: string, paymentStatus: PaymentStatus) => {
     setProjects(prev => {
       const newProjects = prev.map(p => {
         if (p.id === id) {
-          // Rimuovi 'paidAt' per evitare di inviare 'undefined' a Firestore.
-          // Verrà riaggiunto solo se lo stato è 'Pagato'.
           const { paidAt, ...rest } = p;
-          const updatedProject: Project = {
-            ...rest,
-            paymentStatus,
-          };
-
+          const updatedProject: Project = { ...rest, paymentStatus, };
           if (paymentStatus === PaymentStatus.Pagato) {
-            // Aggiungi 'paidAt' solo se lo stato è 'Pagato',
-            // usando la data esistente o creandone una nuova.
             updatedProject.paidAt = p.paidAt || new Date().toISOString();
           }
           return updatedProject;
@@ -533,6 +468,18 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   };
 
   const selectedClient = useMemo(() => clients.find(c => c.id === selectedView), [clients, selectedView]);
+  
+  const getPriorityClass = (clientId: string): string => {
+    const priority = clientPriorities.get(clientId);
+    if (!priority) return 'border-transparent';
+    switch (priority) {
+      case ProjectPriority.Alta: return 'border-orange-500';
+      case ProjectPriority.Media: return 'border-green-500';
+      case ProjectPriority.Bassa: return 'border-gray-500';
+      default: return 'border-transparent';
+    }
+  };
+
 
   return (
     <div className="flex h-screen font-sans bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">
@@ -546,23 +493,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Cambia tema">
                     {theme === 'light' ? <MoonIcon className="w-5 h-5"/> : <SunIcon className="w-5 h-5"/>}
                 </button>
-                <div className="relative" ref={settingsMenuRef}>
-                    <button onClick={() => setIsSettingsMenuOpen(prev => !prev)} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Opzioni e Backup">
-                        <CogIcon className="w-5 h-5"/>
-                    </button>
-                    {isSettingsMenuOpen && (
-                        <div className="absolute bottom-full right-0 mb-2 w-48 bg-gray-700 rounded-md shadow-lg py-1 z-10 border border-gray-600">
-                            <button onClick={handleExportData} className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-primary transition-colors flex items-center gap-3">
-                                <DownloadIcon className="w-4 h-4" /> 
-                                <span>Esporta Backup</span>
-                            </button>
-                            <button onClick={handleImportData} className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-primary transition-colors flex items-center gap-3">
-                                <UploadIcon className="w-4 h-4" /> 
-                                <span>Importa Backup</span>
-                            </button>
-                        </div>
-                    )}
-                </div>
                  <button onClick={onLogout} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Esci">
                     <LogOutIcon className="w-5 h-5"/>
                 </button>
@@ -572,11 +502,16 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             <ul>
                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'dashboard' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => setSelectedView('dashboard')}><ChartBarIcon className="w-5 h-5 mr-3"/> Dashboard</li>
                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'calendar' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => setSelectedView('calendar')}><CalendarIcon className="w-5 h-5 mr-3"/> Calendario</li>
+                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'settings' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => setSelectedView('settings')}><CogIcon className="w-5 h-5 mr-3"/> Impostazioni</li>
             </ul>
             <h2 className="text-sm font-semibold text-gray-400 mt-6 mb-2 px-3 uppercase">Clienti</h2>
             <ul>
                 {clients.map((client, index) => (
-                    <li key={client.id} draggable="true" onDragStart={e => handleDragStart(e, index)} onDragOver={handleDragOver} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, index)} onDragEnd={handleDragEnd} className={`group flex items-center justify-between p-3 rounded-lg cursor-grab mb-1 transition-all text-sm ${selectedView === client.id ? 'bg-primary' : 'hover:bg-gray-700'} ${inactiveClients.has(client.id) ? 'opacity-60' : ''}`}>
+                    <li key={client.id} draggable="true" onDragStart={e => handleDragStart(e, index)} onDragOver={handleDragOver} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, index)} onDragEnd={handleDragEnd} 
+                        className={`group flex items-center justify-between p-3 rounded-lg cursor-grab mb-1 transition-all text-sm border-l-4
+                        ${selectedView === client.id ? 'bg-primary' : 'hover:bg-gray-700'} 
+                        ${getPriorityClass(client.id)}
+                        ${inactiveClients.has(client.id) ? 'opacity-60' : ''}`}>
                         <div className="flex items-center flex-1 min-w-0" onClick={() => setSelectedView(client.id)}>
                             <UsersIcon className="w-4 h-4 mr-3 flex-shrink-0"/> 
                             <span className="truncate">{client.name}</span>
@@ -588,7 +523,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         <div className="space-y-2 mt-4 flex-shrink-0">
             <button onClick={() => openModal('client')} className="w-full bg-accent text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-opacity-80 transition-opacity"><PlusIcon className="w-5 h-5 mr-2"/> Nuovo Cliente</button>
         </div>
-        <div className="mt-auto pt-4 text-center text-xs text-gray-400 flex-shrink-0">v1.5.0</div>
+        <div className="mt-auto pt-4 text-center text-xs text-gray-400 flex-shrink-0">v1.6.0</div>
       </aside>
 
       <main className="flex-1 p-8 overflow-y-auto">
@@ -604,6 +539,14 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             availableYears={availableYears}
         />}
         {selectedView === 'calendar' && <CalendarView todos={todos} projects={projects} clients={clients}/>}
+        {selectedView === 'settings' && <SettingsView 
+            userId={userId} 
+            onImportSuccess={(data) => {
+                setClients(data.clients);
+                setProjects(data.projects);
+                setTodos(data.todos);
+            }}
+        />}
         {selectedClient && (
             <ClientView 
                 client={selectedClient} 
@@ -611,6 +554,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 todos={todos}
                 onUpdateProjectWorkStatus={handleUpdateProjectWorkStatus}
                 onUpdateProjectPaymentStatus={handleUpdateProjectPaymentStatus}
+                onUpdateProjectPriority={handleUpdateProjectPriority}
                 onToggleTodo={handleToggleTodo}
                 onAddProject={clientId => openModal('project', clientId)}
                 onAiAddProject={openAiModal}
@@ -666,7 +610,6 @@ export default function App() {
         : <SetupScreen onNavigateToLogin={() => setAuthView('login')} />;
     case 'authenticated':
       if (!authState.data || !authState.user) {
-        // Mostra uno stato di caricamento anche qui per gestire la transizione
         return <div className="flex items-center justify-center h-screen bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">Caricamento dati utente...</div>;
       }
       return <MainApp onLogout={handleLogout} initialData={authState.data} userId={authState.user.uid} />;

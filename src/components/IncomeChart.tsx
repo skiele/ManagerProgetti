@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -23,18 +22,18 @@ const IncomeChart: React.FC<IncomeChartProps> = ({ data }) => {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={350}>
       <BarChart
         data={data}
         margin={{
           top: 5,
           right: 30,
           left: 20,
-          bottom: 5,
+          bottom: 70,
         }}
       >
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(128, 128, 128, 0.2)" />
-        <XAxis dataKey="name" stroke="currentColor" fontSize={12} tickLine={false} axisLine={false} />
+        <XAxis dataKey="name" stroke="currentColor" fontSize={12} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" />
         <YAxis stroke="currentColor" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `€${value}`} />
         <Tooltip
           contentStyle={{ 
@@ -45,7 +44,7 @@ const IncomeChart: React.FC<IncomeChartProps> = ({ data }) => {
           }}
           formatter={(value: number) => `€${value.toLocaleString('it-IT')}`}
         />
-        <Legend wrapperStyle={{fontSize: "14px"}}/>
+        <Legend wrapperStyle={{fontSize: "14px", paddingTop: "20px"}}/>
         <Bar dataKey="incassati" fill="#22c55e" name="Incassati" radius={[4, 4, 0, 0]} />
         <Bar dataKey="futuri" fill="#3b82f6" name="Incassi Futuri" radius={[4, 4, 0, 0]} />
         <Bar dataKey="potenziali" fill="#f97316" name="Incassi Potenziali" radius={[4, 4, 0, 0]} />

@@ -1,4 +1,3 @@
-
 import { auth, db } from '../firebaseConfig';
 import { 
   createUserWithEmailAndPassword, 
@@ -8,7 +7,7 @@ import {
   User
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { Client, Project, Todo, WorkStatus, PaymentStatus } from '../types';
+import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
 
 type AppData = {
   clients: Client[];
@@ -39,12 +38,23 @@ const mapOldStatus = (oldStatus: string) => {
 const projectMigrator = (data: any): Project[] => {
   if (!Array.isArray(data)) return [];
   return data.map(project => {
-    if (project && typeof project.status === 'string' && typeof project.workStatus === 'undefined') {
+    if (!project) return project;
+
+    let migratedProject = { ...project };
+
+    // Migrazione status legacy
+    if (typeof project.status === 'string' && typeof project.workStatus === 'undefined') {
       const { status: oldStatus, ...restOfProject } = project;
       const newStatuses = mapOldStatus(oldStatus);
-      return { ...restOfProject, ...newStatuses };
+      migratedProject = { ...restOfProject, ...newStatuses };
     }
-    return project;
+
+    // Aggiunta priorità di default se mancante
+    if (typeof migratedProject.priority === 'undefined') {
+      migratedProject.priority = ProjectPriority.Media;
+    }
+
+    return migratedProject;
   });
 };
 
@@ -118,13 +128,18 @@ export const getData = async (userId: string): Promise<AppData> => {
 
   if (userDocSnap.exists()) {
     const data = userDocSnap.data() as AppData;
-    // Esegue una migrazione interna non distruttiva se i dati sono in formato legacy
+    // Esegue una migrazione interna non distruttiva se i dati sono in formato legacy o senza priorità
     const migratedProjects = projectMigrator(data.projects || []);
-    if (JSON.stringify(migratedProjects) !== JSON.stringify(data.projects)) {
-      console.log("Formato dati legacy rilevato. L'aggiornamento avverrà al prossimo salvataggio automatico.");
-      return { ...data, projects: migratedProjects };
+    
+    // Controlla se la migrazione ha effettivamente cambiato qualcosa
+    const needsUpdate = JSON.stringify(migratedProjects) !== JSON.stringify(data.projects || []);
+    
+    if (needsUpdate) {
+        console.log("Formato dati obsoleto rilevato. L'aggiornamento avverrà al prossimo salvataggio automatico.");
     }
-    return data;
+
+    return { ...data, projects: migratedProjects };
+
   } else {
     // REGOLA DI SICUREZZA CRITICA: Non creare mai un documento qui.
     // La creazione avviene solo durante la registrazione. Questo previene la sovrascrittura
