@@ -27,6 +27,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   const [projects, setProjects] = useState<Project[]>(initialData.projects);
   const [todos, setTodos] = useState<Todo[]>(initialData.todos);
   const draggedClientIdRef = useRef<string | null>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const [isNavScrollable, setIsNavScrollable] = useState(false);
 
 
   // Helper function to save the current state to Firestore
@@ -61,6 +63,21 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     localStorage.setItem('theme', theme);
   }, [theme]);
   
+  useEffect(() => {
+    const navElement = navRef.current;
+    if (!navElement) return;
+
+    // Observer to detect when the nav content size changes
+    const resizeObserver = new ResizeObserver(() => {
+        setIsNavScrollable(navElement.scrollHeight > navElement.clientHeight);
+    });
+
+    resizeObserver.observe(navElement);
+
+    // Cleanup observer on component unmount
+    return () => resizeObserver.disconnect();
+  }, []); // Empty dependency array ensures this runs only once on mount
+
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
   }
@@ -539,7 +556,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 </button>
             </div>
         </div>
-        <nav className="flex-grow overflow-y-auto">
+        <nav ref={navRef} className={`flex-grow overflow-y-auto no-scrollbar ${isNavScrollable ? 'fade-bottom' : ''}`}>
             <ul>
                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'dashboard' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => setSelectedView('dashboard')}><ChartBarIcon className="w-5 h-5 mr-3"/> Dashboard</li>
                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'calendar' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => setSelectedView('calendar')}><CalendarIcon className="w-5 h-5 mr-3"/> Calendario</li>
