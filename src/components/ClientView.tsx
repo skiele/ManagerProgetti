@@ -16,11 +16,12 @@ interface ClientViewProps {
     onAiAddProject: (clientId: string) => void;
     onAddTodo: (projectId: string) => void;
     onDeleteProject: (id: string) => void;
+    onDuplicateProject: (id: string) => void;
     onDeleteTodo: (id: string) => void;
     onUpdateProjectNotes: (id: string, notes: string) => void;
 }
 
-const ClientView: React.FC<ClientViewProps> = ({ client, projects, todos, onUpdateProjectWorkStatus, onUpdateProjectPaymentStatus, onToggleTodo, onAddProject, onAiAddProject, onAddTodo, onDeleteProject, onDeleteTodo, onUpdateProjectNotes }) => (
+const ClientView: React.FC<ClientViewProps> = ({ client, projects, todos, onUpdateProjectWorkStatus, onUpdateProjectPaymentStatus, onToggleTodo, onAddProject, onAiAddProject, onAddTodo, onDeleteProject, onDuplicateProject, onDeleteTodo, onUpdateProjectNotes }) => (
     <div>
         <div className="flex justify-between items-center mb-6 gap-2 flex-wrap">
             <div>
@@ -47,6 +48,7 @@ const ClientView: React.FC<ClientViewProps> = ({ client, projects, todos, onUpda
                     onToggleTodo={onToggleTodo}
                     onAddTodo={onAddTodo}
                     onDeleteProject={onDeleteProject}
+                    onDuplicateProject={onDuplicateProject}
                     onDeleteTodo={onDeleteTodo}
                     onUpdateProjectNotes={onUpdateProjectNotes}
                 />

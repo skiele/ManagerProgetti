@@ -28,6 +28,7 @@ export interface Project {
   paymentStatus: PaymentStatus;
   createdAt: string;
   notes?: string;
+  paidAt?: string;
 }
 
 export interface Todo {

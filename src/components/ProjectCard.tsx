@@ -1,7 +1,8 @@
 
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { Project, Todo, WorkStatus, PaymentStatus } from '../types';
-import { PlusIcon, TrashIcon } from './icons';
+import { PlusIcon, TrashIcon, CopyIcon } from './icons';
 import { workStatusConfig, paymentStatusConfig } from '../config/status';
 import { formatCurrency } from '../utils/formatting';
 import TodoItem from './TodoItem';
@@ -14,6 +15,7 @@ interface ProjectCardProps {
   onToggleTodo: (id: string, completed: boolean) => void;
   onAddTodo: (projectId: string) => void;
   onDeleteProject: (id: string) => void;
+  onDuplicateProject: (id: string) => void;
   onDeleteTodo: (id: string) => void;
   onUpdateProjectNotes: (id: string, notes: string) => void;
 }
@@ -25,7 +27,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   onUpdateProjectPaymentStatus, 
   onToggleTodo, 
   onAddTodo, 
-  onDeleteProject, 
+  onDeleteProject,
+  onDuplicateProject,
   onDeleteTodo,
   onUpdateProjectNotes
 }) => {
@@ -74,9 +77,14 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                 ))}
               </select>
             </div>
-            <button onClick={() => onDeleteProject(project.id)} className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label={`Elimina progetto ${project.name}`}>
-                <TrashIcon className="w-5 h-5" />
-            </button>
+            <div className="flex items-center">
+                <button onClick={() => onDuplicateProject(project.id)} className="text-gray-400 hover:text-blue-500 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label={`Duplica progetto ${project.name}`}>
+                    <CopyIcon className="w-5 h-5" />
+                </button>
+                <button onClick={() => onDeleteProject(project.id)} className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label={`Elimina progetto ${project.name}`}>
+                    <TrashIcon className="w-5 h-5" />
+                </button>
+            </div>
           </div>
         </div>
         <div className="mt-4">

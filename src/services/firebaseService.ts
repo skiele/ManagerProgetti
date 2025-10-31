@@ -47,7 +47,7 @@ const projectMigrator = (data: any): Project[] => {
   });
 };
 
-const migrateLegacyDataFromLocalStorage = (): AppData | null => {
+const migrateLegacyDataFromLocalStorage = async (userId: string): Promise<AppData | null> => {
     const legacyClients = localStorage.getItem('clients');
     const legacyProjects = localStorage.getItem('projects');
     const legacyTodos = localStorage.getItem('todos');
@@ -55,17 +55,30 @@ const migrateLegacyDataFromLocalStorage = (): AppData | null => {
 
     if (legacyClients && legacyProjects && legacyTodos) {
         console.log("Dati legacy trovati. Eseguo la migrazione su Firestore...");
-        const clients = JSON.parse(legacyClients);
-        const projects = projectMigrator(JSON.parse(legacyProjects));
-        const todos = JSON.parse(legacyTodos);
-        
-        localStorage.removeItem('clients');
-        localStorage.removeItem('projects');
-        localStorage.removeItem('todos');
-        if (legacyUser) localStorage.removeItem('userCredentials');
-        
-        console.log("Migrazione completata. I vecchi dati locali sono stati rimossi.");
-        return { clients, projects, todos };
+        try {
+            const clients = JSON.parse(legacyClients);
+            const projects = projectMigrator(JSON.parse(legacyProjects));
+            const todos = JSON.parse(legacyTodos);
+            
+            const dataToMigrate = { clients, projects, todos };
+
+            // 1. Salva i dati su Firestore PRIMA di cancellarli localmente
+            await setDoc(doc(db, "users", userId), dataToMigrate);
+
+            // 2. Solo se il salvataggio ha successo, procedi con la pulizia
+            localStorage.removeItem('clients');
+            localStorage.removeItem('projects');
+            localStorage.removeItem('todos');
+            if (legacyUser) localStorage.removeItem('userCredentials');
+            
+            console.log("Migrazione completata con successo. I vecchi dati locali sono stati rimossi.");
+            return dataToMigrate;
+
+        } catch (error) {
+            console.error("Errore critico durante la migrazione dei dati. I dati locali non sono stati rimossi.", error);
+            // Non ritornare nulla in caso di errore per forzare il caricamento di dati vuoti/esistenti.
+            return null;
+        }
     }
     return null;
 }
@@ -76,11 +89,13 @@ export const register = async (email: string, password: string): Promise<User> =
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
   const user = userCredential.user;
 
-  // Controlla se ci sono dati legacy da migrare
-  const migratedData = migrateLegacyDataFromLocalStorage();
+  // Controlla se ci sono dati legacy da migrare e li salva in modo sicuro
+  const migratedData = await migrateLegacyDataFromLocalStorage(user.uid);
   
-  // Crea il documento utente in Firestore con i dati migrati o con i dati iniziali
-  await setDoc(doc(db, "users", user.uid), migratedData || initialData);
+  // Se non ci sono dati migrati, crea il documento utente vuoto
+  if (!migratedData) {
+      await setDoc(doc(db, "users", user.uid), initialData);
+  }
   
   return user;
 }
@@ -103,12 +118,12 @@ export const getData = async (userId: string): Promise<AppData> => {
   if (userDocSnap.exists()) {
     return userDocSnap.data() as AppData;
   } else {
-    // L'utente è autenticato ma non ha un documento dati (es. primo login dopo cancellazione db)
-    // Provo a migrare i dati da localStorage come fallback
-    const migratedData = migrateLegacyDataFromLocalStorage();
+    // L'utente è autenticato ma non ha un documento dati.
+    // Questo può accadere dopo la registrazione o se il db viene cancellato.
+    // Proviamo a migrare i dati da localStorage come fallback.
+    const migratedData = await migrateLegacyDataFromLocalStorage(userId);
     if (migratedData) {
-      await setDoc(userDocRef, migratedData);
-      return migratedData;
+      return migratedData; // I dati sono già stati salvati da migrateLegacy...
     }
     // Se non ci sono dati da migrare, creo un documento vuoto
     await setDoc(userDocRef, initialData);

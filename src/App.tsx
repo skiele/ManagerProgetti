@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
-import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, DownloadIcon, UploadIcon } from './components/icons';
+import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, DownloadIcon, UploadIcon, CopyIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
 import LoginScreen from './components/LoginScreen';
@@ -79,6 +79,32 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   const handleAddTodo = (projectId: string, task: string, income: number, dueDate?: string) => {
     const newTodo: Todo = { id: crypto.randomUUID(), projectId, task, income, completed: false, dueDate };
     setTodos(prev => [...prev, newTodo]);
+  };
+  
+  const handleDuplicateProject = (projectId: string) => {
+    const originalProject = projects.find(p => p.id === projectId);
+    if (!originalProject) return;
+
+    const newProject: Project = {
+        ...originalProject,
+        id: crypto.randomUUID(),
+        name: `${originalProject.name} (Copia)`,
+        workStatus: WorkStatus.PreventivoDaInviare,
+        paymentStatus: PaymentStatus.DaFatturare,
+        createdAt: new Date().toISOString(),
+        paidAt: undefined, // Resetta la data di pagamento
+    };
+
+    const originalTodos = todos.filter(t => t.projectId === projectId);
+    const newTodos: Todo[] = originalTodos.map(todo => ({
+        ...todo,
+        id: crypto.randomUUID(),
+        projectId: newProject.id,
+        completed: false, // Resetta lo stato del to-do
+    }));
+
+    setProjects(prev => [...prev, newProject]);
+    setTodos(prev => [...prev, ...newTodos]);
   };
 
   const handleDeleteClient = (clientId: string) => {
@@ -206,7 +232,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                   setClients(importedData.clients);
                   setProjects(importedData.projects);
                   setTodos(importedData.todos);
-                  alert("Dati importati con successo!");
+                  firebaseService.saveData(userId, importedData); // Salva i dati importati su Firebase
+                  alert("Dati importati con successo e salvati sul cloud!");
                   setSelectedView('dashboard');
               }
           } catch (error) {
@@ -378,13 +405,19 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   };
 
   const availableYears = useMemo(() => {
-    const years = new Set(projects.map(p => new Date(p.createdAt).getFullYear().toString()));
-    return Array.from(years).sort((a, b) => String(b).localeCompare(String(a)));
+    const years = new Set(projects.map(p => {
+        const dateToUse = p.paymentStatus === PaymentStatus.Pagato && p.paidAt ? p.paidAt : p.createdAt;
+        return new Date(dateToUse).getFullYear().toString();
+    }));
+    // FIX: Explicitly type `a` and `b` as strings for the sort function
+    // to resolve TypeScript's type inference issue where they were 'unknown'.
+    return Array.from(years).sort((a: string, b: string) => b.localeCompare(a));
   }, [projects]);
   
   const filteredProjects = useMemo(() => {
       return projects.filter(project => {
-          const projectDate = new Date(project.createdAt);
+          const dateToUse = project.paymentStatus === PaymentStatus.Pagato && project.paidAt ? project.paidAt : project.createdAt;
+          const projectDate = new Date(dateToUse);
           const yearMatch = filterYear === 'all' || projectDate.getFullYear().toString() === filterYear;
           const monthMatch = filterMonth === 'all' || (projectDate.getMonth() + 1).toString() === filterMonth;
           return yearMatch && monthMatch;
@@ -430,7 +463,19 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   };
   
   const handleUpdateProjectPaymentStatus = (id: string, paymentStatus: PaymentStatus) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, paymentStatus } : p));
+    setProjects(prev => prev.map(p => {
+      if (p.id === id) {
+        const isNowPaid = paymentStatus === PaymentStatus.Pagato;
+        const wasAlreadyPaid = p.paymentStatus === PaymentStatus.Pagato;
+        return { 
+          ...p, 
+          paymentStatus,
+          // Se lo stato è 'Pagato' e non lo era prima, imposta la data. Altrimenti, mantieni la data esistente se è pagato, o cancellala se non lo è più.
+          paidAt: isNowPaid && !wasAlreadyPaid ? new Date().toISOString() : (isNowPaid ? p.paidAt : undefined)
+        };
+      }
+      return p;
+    }));
   };
   
   const handleToggleTodo = (id: string, completed: boolean) => {
@@ -468,7 +513,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 {clients.map((client, index) => {
                     const clientProjects = projects.filter(p => p.clientId === client.id);
                     const isInactive = clientProjects.length > 0 && clientProjects.every(
-                        p => p.workStatus === WorkStatus.Consegnato && p.paymentStatus === PaymentStatus.Pagato
+                        p => p.paymentStatus === PaymentStatus.Pagato
                     );
 
                     return (
@@ -525,7 +570,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             </button>
         </div>
         <div className="mt-auto pt-4 text-center text-xs text-gray-400">
-          v1.1.0-cloud
+          v1.2.0-cloud
         </div>
       </aside>
 
@@ -556,6 +601,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 onAiAddProject={openAiModal}
                 onAddTodo={(projectId) => openModal('todo', projectId)}
                 onDeleteProject={handleDeleteProject}
+                onDuplicateProject={handleDuplicateProject}
                 onDeleteTodo={handleDeleteTodo}
                 onUpdateProjectNotes={handleUpdateProjectNotes}
             />
@@ -601,8 +647,15 @@ export default function App() {
     const unsubscribe = firebaseService.onAuthChange(async (user) => {
       if (user) {
         setAuthState(prev => ({ ...prev, state: 'loading' })); // Mostra caricamento mentre si prendono i dati
-        const userData = await firebaseService.getData(user.uid);
-        setAuthState({ state: 'authenticated', user, data: userData });
+        try {
+            const userData = await firebaseService.getData(user.uid);
+            setAuthState({ state: 'authenticated', user, data: userData });
+        } catch (error) {
+            console.error("Errore nel caricamento dei dati:", error);
+            // Se c'è un errore (es. permessi), non bloccare l'utente
+            await firebaseService.logout();
+            setAuthState({ state: 'unauthenticated', user: null, data: null });
+        }
       } else {
         setAuthState({ state: 'unauthenticated', user: null, data: null });
       }
