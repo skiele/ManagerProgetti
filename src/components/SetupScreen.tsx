@@ -1,9 +1,8 @@
-
 import React, { useState } from 'react';
-import { hashPassword } from '../utils/auth';
+import * as firebaseService from '../services/firebaseService';
 
 interface SetupScreenProps {
-  onSetupComplete: () => void;
+  onSetupComplete: (username: string) => void;
 }
 
 const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
@@ -11,6 +10,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,11 +26,14 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
       return;
     }
 
-    const passwordHash = await hashPassword(password);
-    const credentials = { username, passwordHash };
-    
-    localStorage.setItem('userCredentials', JSON.stringify(credentials));
-    onSetupComplete();
+    setLoading(true);
+    try {
+      const newUsername = await firebaseService.register(username, password);
+      onSetupComplete(newUsername);
+    } catch (err: any) {
+      setError(err.message || 'Si è verificato un errore.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -57,6 +60,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full p-3 mt-1 border rounded-md dark:bg-gray-700 dark:border-gray-600 focus:ring-primary focus:border-primary"
+              disabled={loading}
             />
           </div>
           <div>
@@ -73,6 +77,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full p-3 mt-1 border rounded-md dark:bg-gray-700 dark:border-gray-600 focus:ring-primary focus:border-primary"
+              disabled={loading}
             />
           </div>
            <div>
@@ -89,15 +94,17 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full p-3 mt-1 border rounded-md dark:bg-gray-700 dark:border-gray-600 focus:ring-primary focus:border-primary"
+              disabled={loading}
             />
           </div>
           {error && <p className="text-sm text-red-500 text-center">{error}</p>}
           <div>
             <button
               type="submit"
-              className="w-full px-4 py-3 font-semibold text-white bg-primary rounded-md hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
+              disabled={loading}
+              className="w-full px-4 py-3 font-semibold text-white bg-primary rounded-md hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors disabled:bg-gray-400"
             >
-              Salva e Accedi
+              {loading ? 'Salvataggio...' : 'Salva e Accedi'}
             </button>
           </div>
         </form>

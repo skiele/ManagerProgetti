@@ -1,33 +1,27 @@
-
 import React, { useState } from 'react';
-import { hashPassword } from '../utils/auth';
+import * as firebaseService from '../services/firebaseService';
 
 interface LoginScreenProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess: (username: string) => void;
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    const storedCredentialsJSON = localStorage.getItem('userCredentials');
-    if (!storedCredentialsJSON) {
-      setError('Nessuna credenziale trovata. Contattare supporto.');
-      return;
-    }
-
-    const storedCredentials = JSON.parse(storedCredentialsJSON);
-    const hashedPassword = await hashPassword(password);
-
-    if (username === storedCredentials.username && hashedPassword === storedCredentials.passwordHash) {
-      onLoginSuccess();
-    } else {
-      setError('Nome utente o password non validi.');
+    try {
+      const loggedInUsername = await firebaseService.login(username, password);
+      onLoginSuccess(loggedInUsername);
+    } catch (err: any) {
+      setError(err.message || 'Si è verificato un errore.');
+      setLoading(false);
     }
   };
 
@@ -56,6 +50,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full p-3 mt-1 border rounded-md dark:bg-gray-700 dark:border-gray-600 focus:ring-primary focus:border-primary"
+              disabled={loading}
             />
           </div>
           <div>
@@ -73,15 +68,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full p-3 mt-1 border rounded-md dark:bg-gray-700 dark:border-gray-600 focus:ring-primary focus:border-primary"
+              disabled={loading}
             />
           </div>
           {error && <p className="text-sm text-red-500 text-center">{error}</p>}
           <div>
             <button
               type="submit"
-              className="w-full px-4 py-3 font-semibold text-white bg-primary rounded-md hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
+              disabled={loading}
+              className="w-full px-4 py-3 font-semibold text-white bg-primary rounded-md hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors disabled:bg-gray-400"
             >
-              Accedi
+              {loading ? 'Accesso in corso...' : 'Accedi'}
             </button>
           </div>
         </form>

@@ -1,8 +1,5 @@
-
-
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
-import useLocalStorage from './hooks/useLocalStorage';
 import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
@@ -10,66 +7,26 @@ import LoginScreen from './components/LoginScreen';
 import SetupScreen from './components/SetupScreen';
 import Dashboard from './components/Dashboard';
 import ClientView from './components/ClientView';
+import * as firebaseService from './services/firebaseService';
 
-type AppState = 'setup' | 'login' | 'authenticated';
-
-const initialClients: Client[] = [];
-const initialProjects: Project[] = [];
-const initialTodos: Todo[] = [];
-
-// --- Funzioni di Migrazione ---
-
-// Questa funzione mappa i vecchi stati dei progetti al nuovo formato più dettagliato.
-const mapOldStatus = (oldStatus: string) => {
-    switch (oldStatus) {
-        case 'preventivo da inviare':
-            return { workStatus: WorkStatus.PreventivoDaInviare, paymentStatus: PaymentStatus.DaFatturare };
-        case 'preventivo inviato':
-            return { workStatus: WorkStatus.PreventivoInviato, paymentStatus: PaymentStatus.DaFatturare };
-        case 'preventivo accettato':
-            return { workStatus: WorkStatus.InLavorazione, paymentStatus: PaymentStatus.DaFatturare };
-        case 'progetto consegnato':
-            return { workStatus: WorkStatus.Consegnato, paymentStatus: PaymentStatus.DaFatturare };
-        case 'attesa di pagamento':
-            return { workStatus: WorkStatus.Consegnato, paymentStatus: PaymentStatus.Fatturato };
-        case 'pagato':
-            return { workStatus: WorkStatus.Consegnato, paymentStatus: PaymentStatus.Pagato };
-        default:
-            // Un fallback sicuro per stati sconosciuti o vecchi.
-            return { workStatus: WorkStatus.PreventivoDaInviare, paymentStatus: PaymentStatus.DaFatturare };
-    }
+type AppState = 'setup' | 'login' | 'loading' | 'authenticated';
+type AppData = {
+  clients: Client[];
+  projects: Project[];
+  todos: Todo[];
 };
-
-/**
- * Funzione migratore per i progetti. Controlla ogni progetto e lo converte al nuovo formato se necessario.
- * Viene passata all'hook useLocalStorage per essere eseguita una sola volta al caricamento iniziale dei dati.
- */
-const projectMigrator = (data: any): Project[] => {
-  if (!Array.isArray(data)) {
-    return initialProjects;
-  }
-  
-  return data.map(project => {
-    // Se 'status' esiste e 'workStatus' non esiste, allora è un vecchio progetto da migrare.
-    if (project && typeof project.status === 'string' && typeof project.workStatus === 'undefined') {
-      const { status: oldStatus, ...restOfProject } = project;
-      const newStatuses = mapOldStatus(oldStatus);
-      return {
-        ...restOfProject,
-        ...newStatuses,
-      };
-    }
-    // Altrimenti, si assume che il progetto sia già nel formato corretto o non valido (verrà filtrato dopo se necessario).
-    return project;
-  });
-};
-
 
 // --- Main Application Component (Protected) ---
-const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
-  const [clients, setClients] = useLocalStorage<Client[]>('clients', initialClients);
-  const [projects, setProjects] = useLocalStorage<Project[]>('projects', initialProjects, projectMigrator);
-  const [todos, setTodos] = useLocalStorage<Todo[]>('todos', initialTodos);
+const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUser: string }> = ({ onLogout, initialData, currentUser }) => {
+  const [clients, setClients] = useState<Client[]>(initialData.clients);
+  const [projects, setProjects] = useState<Project[]>(initialData.projects);
+  const [todos, setTodos] = useState<Todo[]>(initialData.todos);
+  
+  // Effetto per salvare i dati ad ogni modifica
+  useEffect(() => {
+    firebaseService.saveData(currentUser, { clients, projects, todos });
+  }, [clients, projects, todos, currentUser]);
+
 
   const [selectedView, setSelectedView] = useState<string>('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -196,7 +153,7 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
   const availableYears = useMemo(() => {
     const years = new Set(projects.map(p => new Date(p.createdAt).getFullYear().toString()));
-    return Array.from(years).sort((a, b) => b.localeCompare(a));
+    return Array.from(years).sort((a, b) => String(b).localeCompare(String(a)));
   }, [projects]);
   
   const filteredProjects = useMemo(() => {
@@ -365,50 +322,74 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
 
 // --- Authentication Controller Component ---
-
-const getInitialAppState = (): AppState => {
-  try {
-    const isAuthenticated = sessionStorage.getItem('isAuthenticated');
-    if (isAuthenticated === 'true') {
-      return 'authenticated';
-    }
-    const hasCredentials = !!localStorage.getItem('userCredentials');
-    if (hasCredentials) {
-      return 'login';
-    }
-    return 'setup';
-  } catch (e) {
-    console.error("Errore durante la lettura dallo storage:", e);
-    return 'setup';
-  }
-};
-
 export default function App() {
-  const [appState, setAppState] = useState<AppState>(getInitialAppState());
+  const [appState, setAppState] = useState<AppState>('loading');
+  const [initialData, setInitialData] = useState<AppData | null>(null);
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const initialize = async () => {
+      try {
+        const sessionUser = await firebaseService.getCurrentUser();
+        if (sessionUser) {
+          const data = await firebaseService.getData(sessionUser);
+          setInitialData(data);
+          setCurrentUser(sessionUser);
+          setAppState('authenticated');
+        } else {
+          const hasCreds = await firebaseService.hasCredentials();
+          setAppState(hasCreds ? 'login' : 'setup');
+        }
+      } catch (error) {
+        console.error("Errore durante l'inizializzazione:", error);
+        setAppState('setup');
+      }
+    };
+    initialize();
+  }, []);
 
-  const handleSetupComplete = () => {
-    setAppState('login');
+
+  const handleSetupComplete = (username: string) => {
+    // Dopo il setup, considero l'utente come loggato e carico i suoi dati.
+    handleLoginSuccess(username);
   };
 
-  const handleLoginSuccess = () => {
-    sessionStorage.setItem('isAuthenticated', 'true');
-    setAppState('authenticated');
+  const handleLoginSuccess = (username: string) => {
+    setAppState('loading');
+    const loadUserData = async () => {
+        try {
+          const data = await firebaseService.getData(username);
+          setInitialData(data);
+          setCurrentUser(username);
+          setAppState('authenticated');
+        } catch (error) {
+           console.error("Errore durante il recupero dei dati post-login:", error);
+           setAppState('login');
+        }
+    };
+    loadUserData();
   };
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('isAuthenticated');
+  const handleLogout = async () => {
+    await firebaseService.logout();
     setAppState('login');
+    setInitialData(null);
+    setCurrentUser(null);
   };
   
   switch (appState) {
+    case 'loading':
+      return <div className="flex items-center justify-center h-screen">Caricamento...</div>;
     case 'setup':
       return <SetupScreen onSetupComplete={handleSetupComplete} />;
     case 'login':
       return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
     case 'authenticated':
-      return <MainApp onLogout={handleLogout} />;
+      if (!initialData || !currentUser) {
+        return <div className="flex items-center justify-center h-screen">Errore: Dati non disponibili.</div>;
+      }
+      return <MainApp onLogout={handleLogout} initialData={initialData} currentUser={currentUser} />;
     default:
-       // Fallback in case of an unexpected state
       return <SetupScreen onSetupComplete={handleSetupComplete} />;
   }
 }
