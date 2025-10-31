@@ -26,6 +26,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   const [clients, setClients] = useState<Client[]>(initialData.clients);
   const [projects, setProjects] = useState<Project[]>(initialData.projects);
   const [todos, setTodos] = useState<Todo[]>(initialData.todos);
+  const draggedClientIdRef = useRef<string | null>(null);
+
 
   // Helper function to save the current state to Firestore
   const saveDataToCloud = (updatedData: Partial<AppData>) => {
@@ -196,30 +198,44 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     setIsAiModalOpen(true);
   };
 
-  const handleDragStart = (e: React.DragEvent<HTMLLIElement>, index: number) => {
-    e.dataTransfer.setData("clientIndex", index.toString());
+  const handleDragStart = (e: React.DragEvent<HTMLLIElement>, client: Client) => {
+    draggedClientIdRef.current = client.id;
+    e.dataTransfer.setData("clientId", client.id);
     e.currentTarget.classList.add('opacity-50', 'bg-primary');
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLLIElement>) => e.preventDefault();
   
-  const handleDragEnter = (e: React.DragEvent<HTMLLIElement>) => {
+  const handleDragEnter = (e: React.DragEvent<HTMLLIElement>, hoverClient: Client) => {
     e.preventDefault();
-    if (!e.currentTarget.classList.contains('bg-primary')) {
+    const draggedId = draggedClientIdRef.current;
+    if (!draggedId || draggedId === hoverClient.id || e.currentTarget.classList.contains('bg-primary')) return;
+
+    const draggedPriority = clientPriorities.get(draggedId) || ProjectPriority.Bassa;
+    const hoverPriority = clientPriorities.get(hoverClient.id) || ProjectPriority.Bassa;
+
+    if (draggedPriority === hoverPriority) {
         e.currentTarget.classList.add('bg-gray-700');
     }
   }
   
   const handleDragLeave = (e: React.DragEvent<HTMLLIElement>) => e.currentTarget.classList.remove('bg-gray-700');
   
-  const handleDrop = (e: React.DragEvent<HTMLLIElement>, dropIndex: number) => {
+  const handleDrop = (e: React.DragEvent<HTMLLIElement>, dropClient: Client) => {
     e.preventDefault();
     e.currentTarget.classList.remove('bg-gray-700');
-    const dragIndexStr = e.dataTransfer.getData("clientIndex");
-    if (dragIndexStr === "") return;
+    const draggedId = e.dataTransfer.getData("clientId");
+    if (!draggedId || draggedId === dropClient.id) return;
     
-    const dragIndex = parseInt(dragIndexStr, 10);
-    if (dragIndex === dropIndex) return;
+    const draggedPriority = clientPriorities.get(draggedId) || ProjectPriority.Bassa;
+    const dropPriority = clientPriorities.get(dropClient.id) || ProjectPriority.Bassa;
+
+    if (draggedPriority !== dropPriority) return;
+
+    const dragIndex = clients.findIndex(c => c.id === draggedId);
+    const dropIndex = clients.findIndex(c => c.id === dropClient.id);
+    
+    if (dragIndex === -1 || dropIndex === -1) return;
 
     const reorderedClients = [...clients];
     const [draggedClient] = reorderedClients.splice(dragIndex, 1);
@@ -229,7 +245,10 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     saveDataToCloud({ clients: reorderedClients });
   };
   
-  const handleDragEnd = (e: React.DragEvent<HTMLLIElement>) => e.currentTarget.classList.remove('opacity-50', 'bg-primary');
+  const handleDragEnd = (e: React.DragEvent<HTMLLIElement>) => {
+    draggedClientIdRef.current = null;
+    e.currentTarget.classList.remove('opacity-50', 'bg-primary');
+  }
   
   const FormComponent = () => { /* ... Form implementation remains the same ... */ 
     const [name, setName] = useState('');
@@ -412,8 +431,11 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     const priorities = new Map<string, ProjectPriority>();
 
     projects.forEach(project => {
-      // Considera attivo un progetto non annullato e non ancora pagato
-      const isActive = project.workStatus !== WorkStatus.Annullato && project.paymentStatus !== PaymentStatus.Pagato;
+      // Un progetto è considerato "attivo" (e contribuisce alla priorità) se non è annullato
+      // e non è contemporaneamente consegnato E pagato.
+      const isFinished = project.workStatus === WorkStatus.Consegnato && project.paymentStatus === PaymentStatus.Pagato;
+      const isActive = project.workStatus !== WorkStatus.Annullato && !isFinished;
+      
       if (isActive) {
         const currentPriority = priorities.get(project.clientId);
         if (!currentPriority || priorityOrder[project.priority] > priorityOrder[currentPriority]) {
@@ -424,6 +446,25 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     return priorities;
   }, [projects]);
   
+  const sortedClients = useMemo(() => {
+    const high: Client[] = [];
+    const medium: Client[] = [];
+    const low: Client[] = [];
+    
+    clients.forEach(client => {
+        const priority = clientPriorities.get(client.id);
+        if (priority === ProjectPriority.Alta) {
+            high.push(client);
+        } else if (priority === ProjectPriority.Media) {
+            medium.push(client);
+        } else { // Include Bassa e priorità non definite (clienti inattivi)
+            low.push(client);
+        }
+    });
+
+    return [...high, ...medium, ...low];
+  }, [clients, clientPriorities]);
+
 
   const handleUpdateProjectWorkStatus = (id: string, workStatus: WorkStatus) => setProjects(prev => {
     const newProjects = prev.map(p => p.id === id ? { ...p, workStatus } : p);
@@ -506,8 +547,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             </ul>
             <h2 className="text-sm font-semibold text-gray-400 mt-6 mb-2 px-3 uppercase">Clienti</h2>
             <ul>
-                {clients.map((client, index) => (
-                    <li key={client.id} draggable="true" onDragStart={e => handleDragStart(e, index)} onDragOver={handleDragOver} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, index)} onDragEnd={handleDragEnd} 
+                {sortedClients.map((client) => (
+                    <li key={client.id} draggable="true" onDragStart={e => handleDragStart(e, client)} onDragOver={handleDragOver} onDragEnter={e => handleDragEnter(e, client)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, client)} onDragEnd={handleDragEnd} 
                         className={`group flex items-center justify-between p-3 rounded-lg cursor-grab mb-1 transition-all text-sm border-l-4
                         ${selectedView === client.id ? 'bg-primary' : 'hover:bg-gray-700'} 
                         ${getPriorityClass(client.id)}

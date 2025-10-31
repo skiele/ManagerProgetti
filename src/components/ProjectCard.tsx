@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Project, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
-import { PlusIcon, TrashIcon, CopyIcon } from './icons';
+import { PlusIcon, TrashIcon, CopyIcon, FlagIcon, BriefcaseIcon, DollarSignIcon } from './icons';
 import { workStatusConfig, paymentStatusConfig, projectPriorityConfig } from '../config/status';
 import { formatCurrency } from '../utils/formatting';
 import TodoItem from './TodoItem';
@@ -57,34 +57,46 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Creato il: {new Date(project.createdAt).toLocaleDateString('it-IT')}</p>
           </div>
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 flex-shrink-0">
-            <div className="flex items-center gap-2">
-               <select 
-                value={project.priority} 
-                onChange={(e) => onUpdateProjectPriority(project.id, e.target.value as ProjectPriority)}
-                className={`text-sm font-medium text-white px-2 py-1 rounded-full border-none focus:ring-2 focus:ring-white/50 appearance-none ${projectPriorityConfig[project.priority].color}`}
-              >
-                {Object.values(ProjectPriority).map(p => (
-                  <option key={p} value={p} className="text-black bg-white dark:bg-gray-700 dark:text-white">{projectPriorityConfig[p].label}</option>
-                ))}
-              </select>
-              <select 
-                value={project.workStatus} 
-                onChange={(e) => onUpdateProjectWorkStatus(project.id, e.target.value as WorkStatus)}
-                className={`text-sm font-medium text-white px-2 py-1 rounded-full border-none focus:ring-2 focus:ring-white/50 appearance-none ${workStatusConfig[project.workStatus].color}`}
-              >
-                {Object.values(WorkStatus).map(s => (
-                  <option key={s} value={s} className="text-black bg-white dark:bg-gray-700 dark:text-white">{workStatusConfig[s].label}</option>
-                ))}
-              </select>
-              <select 
-                value={project.paymentStatus} 
-                onChange={(e) => onUpdateProjectPaymentStatus(project.id, e.target.value as PaymentStatus)}
-                className={`text-sm font-medium text-white px-2 py-1 rounded-full border-none focus:ring-2 focus:ring-white/50 appearance-none ${paymentStatusConfig[project.paymentStatus].color}`}
-              >
-                {Object.values(PaymentStatus).map(s => (
-                  <option key={s} value={s} className="text-black bg-white dark:bg-gray-700 dark:text-white">{paymentStatusConfig[s].label}</option>
-                ))}
-              </select>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2" title="Priorità">
+                <FlagIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                <select 
+                  value={project.priority} 
+                  onChange={(e) => onUpdateProjectPriority(project.id, e.target.value as ProjectPriority)}
+                  className={`text-sm font-medium text-white px-2 py-1 rounded-full border-none focus:ring-2 focus:ring-white/50 appearance-none ${projectPriorityConfig[project.priority].color}`}
+                  aria-label="Priorità"
+                >
+                  {Object.values(ProjectPriority).map(p => (
+                    <option key={p} value={p} className="text-black bg-white dark:bg-gray-700 dark:text-white">{projectPriorityConfig[p].label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2" title="Stato Lavorazione">
+                <BriefcaseIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                <select 
+                  value={project.workStatus} 
+                  onChange={(e) => onUpdateProjectWorkStatus(project.id, e.target.value as WorkStatus)}
+                  className={`text-sm font-medium text-white px-2 py-1 rounded-full border-none focus:ring-2 focus:ring-white/50 appearance-none ${workStatusConfig[project.workStatus].color}`}
+                  aria-label="Stato Lavorazione"
+                >
+                  {Object.values(WorkStatus).map(s => (
+                    <option key={s} value={s} className="text-black bg-white dark:bg-gray-700 dark:text-white">{workStatusConfig[s].label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2" title="Stato Pagamento">
+                <DollarSignIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                <select 
+                  value={project.paymentStatus} 
+                  onChange={(e) => onUpdateProjectPaymentStatus(project.id, e.target.value as PaymentStatus)}
+                  className={`text-sm font-medium text-white px-2 py-1 rounded-full border-none focus:ring-2 focus:ring-white/50 appearance-none ${paymentStatusConfig[project.paymentStatus].color}`}
+                  aria-label="Stato Pagamento"
+                >
+                  {Object.values(PaymentStatus).map(s => (
+                    <option key={s} value={s} className="text-black bg-white dark:bg-gray-700 dark:text-white">{paymentStatusConfig[s].label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex items-center">
                 <button onClick={() => onDuplicateProject(project.id)} className="text-gray-400 hover:text-blue-500 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label={`Duplica progetto ${project.name}`}>
