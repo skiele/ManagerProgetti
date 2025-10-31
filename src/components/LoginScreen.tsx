@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import * as firebaseService from '../services/firebaseService';
 
 interface LoginScreenProps {
-  onLoginSuccess: (username: string) => void;
+  onNavigateToRegister: () => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
-  const [username, setUsername] = useState('');
+const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }) => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,10 +17,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setLoading(true);
 
     try {
-      const loggedInUsername = await firebaseService.login(username, password);
-      onLoginSuccess(loggedInUsername);
+      await firebaseService.login(email, password);
+      // L'aggiornamento dello stato avverrà nel componente App tramite onAuthStateChanged
     } catch (err: any) {
-      setError(err.message || 'Si è verificato un errore.');
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('Email o password non validi.');
+      } else {
+        setError('Si è verificato un errore durante l\'accesso.');
+        console.error(err);
+      }
       setLoading(false);
     }
   };
@@ -39,16 +44,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         </div>
         <form className="space-y-6" onSubmit={handleLogin}>
           <div>
-            <label htmlFor="username" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Nome Utente
+            <label htmlFor="email" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              Email
             </label>
             <input
-              id="username"
-              name="username"
-              type="text"
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
               required
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full p-3 mt-1 border rounded-md dark:bg-gray-700 dark:border-gray-600 focus:ring-primary focus:border-primary"
               disabled={loading}
             />
@@ -64,6 +70,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               id="password"
               name="password"
               type="password"
+              autoComplete="current-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -82,6 +89,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             </button>
           </div>
         </form>
+        <p className="mt-4 text-center text-sm text-gray-500 dark:text-gray-400">
+            Non hai un account?{' '}
+            <button onClick={onNavigateToRegister} className="font-semibold text-primary hover:underline focus:outline-none">
+                Registrati
+            </button>
+        </p>
       </div>
     </div>
   );

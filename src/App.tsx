@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
-import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon } from './components/icons';
+import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, DownloadIcon, UploadIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
 import LoginScreen from './components/LoginScreen';
@@ -9,8 +9,10 @@ import Dashboard from './components/Dashboard';
 import ClientView from './components/ClientView';
 import * as firebaseService from './services/firebaseService';
 import { GoogleGenAI, Type } from '@google/genai';
+import { User } from 'firebase/auth';
 
-type AppState = 'setup' | 'login' | 'loading' | 'authenticated';
+
+type AppState = 'loading' | 'authenticated' | 'unauthenticated';
 type AppData = {
   clients: Client[];
   projects: Project[];
@@ -18,15 +20,26 @@ type AppData = {
 };
 
 // --- Main Application Component (Protected) ---
-const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUser: string }> = ({ onLogout, initialData, currentUser }) => {
+const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: string }> = ({ onLogout, initialData, userId }) => {
   const [clients, setClients] = useState<Client[]>(initialData.clients);
   const [projects, setProjects] = useState<Project[]>(initialData.projects);
   const [todos, setTodos] = useState<Todo[]>(initialData.todos);
   
   // Effetto per salvare i dati ad ogni modifica
   useEffect(() => {
-    firebaseService.saveData(currentUser, { clients, projects, todos });
-  }, [clients, projects, todos, currentUser]);
+    // Non salvare se i dati iniziali non sono ancora stati processati
+    if (initialData.clients === clients && initialData.projects === projects && initialData.todos === todos) {
+        return;
+    }
+    firebaseService.saveData(userId, { clients, projects, todos });
+  }, [clients, projects, todos, userId, initialData]);
+
+  // Sincronizza lo stato se i dati iniziali cambiano (es. primo caricamento)
+  useEffect(() => {
+      setClients(initialData.clients);
+      setProjects(initialData.projects);
+      setTodos(initialData.todos);
+  }, [initialData]);
 
 
   const [selectedView, setSelectedView] = useState<string>('dashboard');
@@ -40,6 +53,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
 
   const [filterYear, setFilterYear] = useState('all');
   const [filterMonth, setFilterMonth] = useState('all');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAddClient = (name: string, email?: string) => {
     const newClient: Client = { id: crypto.randomUUID(), name, email };
@@ -146,6 +161,71 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
     e.currentTarget.classList.remove('opacity-50', 'bg-primary');
   };
 
+  const handleExportData = () => {
+    try {
+        const dataToExport = { clients, projects, todos };
+        const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+          JSON.stringify(dataToExport, null, 2)
+        )}`;
+        const link = document.createElement("a");
+        link.href = jsonString;
+        const date = new Date().toISOString().slice(0, 10);
+        link.download = `progetta_backup_${date}.json`;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (error) {
+        console.error("Errore durante l'esportazione:", error);
+        alert("Si è verificato un errore durante l'esportazione dei dati.");
+    }
+  };
+
+  const handleImportClick = () => {
+      fileInputRef.current?.click();
+  };
+
+  const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+          try {
+              const text = e.target?.result;
+              if (typeof text !== 'string') throw new Error("Il file non può essere letto.");
+              
+              const importedData = JSON.parse(text);
+
+              // Basic validation
+              if (!importedData.clients || !importedData.projects || !importedData.todos || !Array.isArray(importedData.clients) || !Array.isArray(importedData.projects) || !Array.isArray(importedData.todos)) {
+                  throw new Error("Il file JSON non ha la struttura corretta (deve contenere 'clients', 'projects', 'todos').");
+              }
+
+              if (window.confirm("Sei sicuro di voler importare questi dati? L'operazione sovrascriverà tutti i dati attuali. Si consiglia di esportare un backup prima di procedere.")) {
+                  setClients(importedData.clients);
+                  setProjects(importedData.projects);
+                  setTodos(importedData.todos);
+                  alert("Dati importati con successo!");
+                  setSelectedView('dashboard');
+              }
+          } catch (error) {
+              console.error("Errore durante l'importazione:", error);
+              alert(`Errore durante l'importazione del file: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`);
+          } finally {
+              if (event.target) {
+                  event.target.value = '';
+              }
+          }
+      };
+      reader.onerror = () => {
+          alert("Errore durante la lettura del file.");
+           if (event.target) {
+              event.target.value = '';
+          }
+      }
+      reader.readAsText(file);
+  };
 
   const FormComponent = () => {
     const [name, setName] = useState('');
@@ -427,12 +507,25 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
             <button onClick={() => openModal('client')} className="w-full bg-accent text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-opacity-80 transition-opacity">
                 <PlusIcon className="w-5 h-5 mr-2"/> Nuovo Cliente
             </button>
-             <button onClick={onLogout} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-gray-500 transition-colors">
+            
+            <hr className="!my-4 border-gray-700" />
+            
+            <input type="file" ref={fileInputRef} onChange={handleFileImport} style={{ display: 'none' }} accept=".json" />
+            <button onClick={handleImportClick} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-gray-500 transition-colors text-sm">
+                <UploadIcon className="w-4 h-4 mr-2"/> Importa Dati
+            </button>
+            <button onClick={handleExportData} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-gray-500 transition-colors text-sm">
+                <DownloadIcon className="w-4 h-4 mr-2"/> Esporta Dati
+            </button>
+            
+            <hr className="!my-4 border-gray-700" />
+            
+             <button onClick={onLogout} className="w-full bg-gray-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-red-500 transition-colors">
                 <LogOutIcon className="w-5 h-5 mr-2"/> Esci
             </button>
         </div>
         <div className="mt-auto pt-4 text-center text-xs text-gray-400">
-          v1.0.1
+          v1.1.0-cloud
         </div>
       </aside>
 
@@ -496,73 +589,49 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
 
 // --- Authentication Controller Component ---
 export default function App() {
-  const [appState, setAppState] = useState<AppState>('loading');
-  const [initialData, setInitialData] = useState<AppData | null>(null);
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [authState, setAuthState] = useState<{ state: AppState; user: User | null; data: AppData | null }>({
+    state: 'loading',
+    user: null,
+    data: null,
+  });
   
+  const [authView, setAuthView] = useState<'login' | 'setup'>('login');
+
   useEffect(() => {
-    const initialize = async () => {
-      try {
-        const sessionUser = await firebaseService.getCurrentUser();
-        if (sessionUser) {
-          const data = await firebaseService.getData(sessionUser);
-          setInitialData(data);
-          setCurrentUser(sessionUser);
-          setAppState('authenticated');
-        } else {
-          const hasCreds = await firebaseService.hasCredentials();
-          setAppState(hasCreds ? 'login' : 'setup');
-        }
-      } catch (error) {
-        console.error("Errore durante l'inizializzazione:", error);
-        setAppState('setup');
+    const unsubscribe = firebaseService.onAuthChange(async (user) => {
+      if (user) {
+        setAuthState(prev => ({ ...prev, state: 'loading' })); // Mostra caricamento mentre si prendono i dati
+        const userData = await firebaseService.getData(user.uid);
+        setAuthState({ state: 'authenticated', user, data: userData });
+      } else {
+        setAuthState({ state: 'unauthenticated', user: null, data: null });
       }
-    };
-    initialize();
+    });
+
+    // Pulisci il listener quando il componente viene smontato
+    return () => unsubscribe();
   }, []);
 
 
-  const handleSetupComplete = (username: string) => {
-    // Dopo il setup, considero l'utente come loggato e carico i suoi dati.
-    handleLoginSuccess(username);
-  };
-
-  const handleLoginSuccess = (username: string) => {
-    setAppState('loading');
-    const loadUserData = async () => {
-        try {
-          const data = await firebaseService.getData(username);
-          setInitialData(data);
-          setCurrentUser(username);
-          setAppState('authenticated');
-        } catch (error) {
-           console.error("Errore durante il recupero dei dati post-login:", error);
-           setAppState('login');
-        }
-    };
-    loadUserData();
-  };
-
   const handleLogout = async () => {
     await firebaseService.logout();
-    setAppState('login');
-    setInitialData(null);
-    setCurrentUser(null);
+    // Lo stato si aggiornerà automaticamente grazie a onAuthStateChanged
   };
   
-  switch (appState) {
+  switch (authState.state) {
     case 'loading':
-      return <div className="flex items-center justify-center h-screen">Caricamento...</div>;
-    case 'setup':
-      return <SetupScreen onSetupComplete={handleSetupComplete} />;
-    case 'login':
-      return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+      return <div className="flex items-center justify-center h-screen bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">Caricamento in corso...</div>;
+    case 'unauthenticated':
+        if (authView === 'login') {
+            return <LoginScreen onNavigateToRegister={() => setAuthView('setup')} />;
+        }
+        return <SetupScreen onNavigateToLogin={() => setAuthView('login')} />;
     case 'authenticated':
-      if (!initialData || !currentUser) {
-        return <div className="flex items-center justify-center h-screen">Errore: Dati non disponibili.</div>;
+      if (!authState.data || !authState.user) {
+        return <div className="flex items-center justify-center h-screen">Errore: Dati utente non disponibili. Ricaricamento in corso...</div>;
       }
-      return <MainApp onLogout={handleLogout} initialData={initialData} currentUser={currentUser} />;
+      return <MainApp onLogout={handleLogout} initialData={authState.data} userId={authState.user.uid} />;
     default:
-      return <SetupScreen onSetupComplete={handleSetupComplete} />;
+      return <LoginScreen onNavigateToRegister={() => setAuthView('setup')} />;
   }
 }

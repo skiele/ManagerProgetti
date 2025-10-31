@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import * as firebaseService from '../services/firebaseService';
 
 interface SetupScreenProps {
-  onSetupComplete: (username: string) => void;
+  onNavigateToLogin: () => void;
 }
 
-const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
-  const [username, setUsername] = useState('');
+const SetupScreen: React.FC<SetupScreenProps> = ({ onNavigateToLogin }) => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -28,10 +28,15 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
 
     setLoading(true);
     try {
-      const newUsername = await firebaseService.register(username, password);
-      onSetupComplete(newUsername);
+      await firebaseService.register(email, password);
+      // L'aggiornamento dello stato avverrà nel componente App tramite onAuthStateChanged
     } catch (err: any) {
-      setError(err.message || 'Si è verificato un errore.');
+      if (err.code === 'auth/email-already-in-use') {
+        setError('Questo indirizzo email è già in uso.');
+      } else {
+        setError('Si è verificato un errore durante la registrazione.');
+        console.error(err);
+      }
       setLoading(false);
     }
   };
@@ -45,20 +50,21 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
                 Benvenuto in Progetta
             </h1>
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                Configura il tuo account per iniziare.
+                Crea il tuo account per iniziare.
             </p>
         </div>
         <form className="space-y-6" onSubmit={handleSetup}>
           <div>
-            <label htmlFor="username" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Crea Nome Utente
+            <label htmlFor="email" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              Email
             </label>
             <input
-              id="username"
-              type="text"
+              id="email"
+              type="email"
+              autoComplete="email"
               required
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full p-3 mt-1 border rounded-md dark:bg-gray-700 dark:border-gray-600 focus:ring-primary focus:border-primary"
               disabled={loading}
             />
@@ -73,6 +79,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
             <input
               id="password"
               type="password"
+              autoComplete="new-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -90,6 +97,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
             <input
               id="confirm-password"
               type="password"
+              autoComplete="new-password"
               required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -104,10 +112,16 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
               disabled={loading}
               className="w-full px-4 py-3 font-semibold text-white bg-primary rounded-md hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors disabled:bg-gray-400"
             >
-              {loading ? 'Salvataggio...' : 'Salva e Accedi'}
+              {loading ? 'Creazione account...' : 'Crea Account e Accedi'}
             </button>
           </div>
         </form>
+         <p className="mt-4 text-center text-sm text-gray-500 dark:text-gray-400">
+            Hai già un account?{' '}
+            <button onClick={onNavigateToLogin} className="font-semibold text-primary hover:underline focus:outline-none">
+                Accedi
+            </button>
+        </p>
       </div>
     </div>
   );

@@ -1,3 +1,12 @@
+import { auth, db } from '../firebaseConfig';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut,
+  onAuthStateChanged,
+  User
+} from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from '../types';
 
 type AppData = {
@@ -12,24 +21,17 @@ const initialData: AppData = {
   todos: [],
 };
 
-// --- Funzioni di Migrazione (per dati legacy) ---
+// --- Funzioni di Migrazione (per dati legacy da localStorage) ---
 
 const mapOldStatus = (oldStatus: string) => {
     switch (oldStatus) {
-        case 'preventivo da inviare':
-            return { workStatus: WorkStatus.PreventivoDaInviare, paymentStatus: PaymentStatus.DaFatturare };
-        case 'preventivo inviato':
-            return { workStatus: WorkStatus.PreventivoInviato, paymentStatus: PaymentStatus.DaFatturare };
-        case 'preventivo accettato':
-            return { workStatus: WorkStatus.InLavorazione, paymentStatus: PaymentStatus.DaFatturare };
-        case 'progetto consegnato':
-            return { workStatus: WorkStatus.Consegnato, paymentStatus: PaymentStatus.DaFatturare };
-        case 'attesa di pagamento':
-            return { workStatus: WorkStatus.Consegnato, paymentStatus: PaymentStatus.Fatturato };
-        case 'pagato':
-            return { workStatus: WorkStatus.Consegnato, paymentStatus: PaymentStatus.Pagato };
-        default:
-            return { workStatus: WorkStatus.PreventivoDaInviare, paymentStatus: PaymentStatus.DaFatturare };
+        case 'preventivo da inviare': return { workStatus: WorkStatus.PreventivoDaInviare, paymentStatus: PaymentStatus.DaFatturare };
+        case 'preventivo inviato': return { workStatus: WorkStatus.PreventivoInviato, paymentStatus: PaymentStatus.DaFatturare };
+        case 'preventivo accettato': return { workStatus: WorkStatus.InLavorazione, paymentStatus: PaymentStatus.DaFatturare };
+        case 'progetto consegnato': return { workStatus: WorkStatus.Consegnato, paymentStatus: PaymentStatus.DaFatturare };
+        case 'attesa di pagamento': return { workStatus: WorkStatus.Consegnato, paymentStatus: PaymentStatus.Fatturato };
+        case 'pagato': return { workStatus: WorkStatus.Consegnato, paymentStatus: PaymentStatus.Pagato };
+        default: return { workStatus: WorkStatus.PreventivoDaInviare, paymentStatus: PaymentStatus.DaFatturare };
     }
 };
 
@@ -45,13 +47,14 @@ const projectMigrator = (data: any): Project[] => {
   });
 };
 
-const migrateLegacyData = (): AppData | null => {
+const migrateLegacyDataFromLocalStorage = (): AppData | null => {
     const legacyClients = localStorage.getItem('clients');
     const legacyProjects = localStorage.getItem('projects');
     const legacyTodos = localStorage.getItem('todos');
+    const legacyUser = localStorage.getItem('userCredentials'); // Per pulizia completa
 
     if (legacyClients && legacyProjects && legacyTodos) {
-        console.log("Dati legacy trovati. Eseguo la migrazione...");
+        console.log("Dati legacy trovati. Eseguo la migrazione su Firestore...");
         const clients = JSON.parse(legacyClients);
         const projects = projectMigrator(JSON.parse(legacyProjects));
         const todos = JSON.parse(legacyTodos);
@@ -59,94 +62,67 @@ const migrateLegacyData = (): AppData | null => {
         localStorage.removeItem('clients');
         localStorage.removeItem('projects');
         localStorage.removeItem('todos');
+        if (legacyUser) localStorage.removeItem('userCredentials');
         
-        console.log("Migrazione completata. I vecchi dati sono stati rimossi.");
+        console.log("Migrazione completata. I vecchi dati locali sono stati rimossi.");
         return { clients, projects, todos };
     }
     return null;
 }
 
-// --- Auth Utilities ---
-async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+// --- Funzioni di Autenticazione Reali ---
+
+export const register = async (email: string, password: string): Promise<User> => {
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  const user = userCredential.user;
+
+  // Controlla se ci sono dati legacy da migrare
+  const migratedData = migrateLegacyDataFromLocalStorage();
+  
+  // Crea il documento utente in Firestore con i dati migrati o con i dati iniziali
+  await setDoc(doc(db, "users", user.uid), migratedData || initialData);
+  
+  return user;
 }
 
-// --- Servizio Cloud Simulato ---
-
-const networkDelay = (ms: number) => new Promise(res => setTimeout(res, ms));
-
-const CREDENTIALS_KEY = 'userCredentials';
-const SESSION_KEY = 'currentUser';
-
-export async function register(username: string, password: string): Promise<string> {
-    await networkDelay(500);
-    if (localStorage.getItem(CREDENTIALS_KEY)) {
-        throw new Error("Un utente è già registrato.");
-    }
-    const passwordHash = await hashPassword(password);
-    const credentials = { username, passwordHash };
-    localStorage.setItem(CREDENTIALS_KEY, JSON.stringify(credentials));
-    localStorage.setItem(SESSION_KEY, username);
-    return username;
+export const login = async (email: string, password: string): Promise<User> => {
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  return userCredential.user;
 }
 
-export async function login(username: string, password: string): Promise<string> {
-    await networkDelay(500);
-    const storedCredentialsJSON = localStorage.getItem(CREDENTIALS_KEY);
-    if (!storedCredentialsJSON) {
-      throw new Error("Nessun utente registrato. Procedi con la configurazione.");
-    }
-
-    const storedCredentials = JSON.parse(storedCredentialsJSON);
-    const hashedPassword = await hashPassword(password);
-
-    if (username === storedCredentials.username && hashedPassword === storedCredentials.passwordHash) {
-      localStorage.setItem(SESSION_KEY, username);
-      return username;
-    } else {
-      throw new Error('Nome utente o password non validi.');
-    }
+export const logout = (): Promise<void> => {
+  return signOut(auth);
 }
 
-export async function logout(): Promise<void> {
-    await networkDelay(200);
-    localStorage.removeItem(SESSION_KEY);
-}
+// --- Funzioni Dati Reali ---
 
-export async function getCurrentUser(): Promise<string | null> {
-    await networkDelay(100);
-    return localStorage.getItem(SESSION_KEY);
-}
+export const getData = async (userId: string): Promise<AppData> => {
+  const userDocRef = doc(db, "users", userId);
+  const userDocSnap = await getDoc(userDocRef);
 
-export async function hasCredentials(): Promise<boolean> {
-    await networkDelay(100);
-    return !!localStorage.getItem(CREDENTIALS_KEY);
-}
-
-export const getData = async (username: string): Promise<AppData> => {
-    await networkDelay(800);
-    const dataKey = `progetta_data_${username}`;
-    const userDataJSON = localStorage.getItem(dataKey);
-
-    if (userDataJSON) {
-        return JSON.parse(userDataJSON);
-    }
-    
-    const migratedData = migrateLegacyData();
+  if (userDocSnap.exists()) {
+    return userDocSnap.data() as AppData;
+  } else {
+    // L'utente è autenticato ma non ha un documento dati (es. primo login dopo cancellazione db)
+    // Provo a migrare i dati da localStorage come fallback
+    const migratedData = migrateLegacyDataFromLocalStorage();
     if (migratedData) {
-        await saveData(username, migratedData);
-        return migratedData;
+      await setDoc(userDocRef, migratedData);
+      return migratedData;
     }
-    
+    // Se non ci sono dati da migrare, creo un documento vuoto
+    await setDoc(userDocRef, initialData);
     return initialData;
+  }
 };
 
-export const saveData = async (username: string, data: AppData): Promise<void> => {
-    await networkDelay(300);
-    const dataKey = `progetta_data_${username}`;
-    localStorage.setItem(dataKey, JSON.stringify(data));
+export const saveData = (userId: string, data: AppData): Promise<void> => {
+  const userDocRef = doc(db, "users", userId);
+  // `setDoc` sovrascrive, che è il comportamento desiderato per salvare l'intero stato dell'app.
+  return setDoc(userDocRef, data);
+};
+
+// Funzione per ascoltare i cambiamenti dello stato di autenticazione
+export const onAuthChange = (callback: (user: User | null) => void) => {
+  return onAuthStateChanged(auth, callback);
 };
