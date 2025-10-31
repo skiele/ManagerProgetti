@@ -409,8 +409,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         const dateToUse = p.paymentStatus === PaymentStatus.Pagato && p.paidAt ? p.paidAt : p.createdAt;
         return new Date(dateToUse).getFullYear().toString();
     }));
-    // FIX: Explicitly type `a` and `b` as strings for the sort function
-    // to resolve TypeScript's type inference issue where they were 'unknown'.
     return Array.from(years).sort((a: string, b: string) => b.localeCompare(a));
   }, [projects]);
   
@@ -470,7 +468,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         return { 
           ...p, 
           paymentStatus,
-          // Se lo stato è 'Pagato' e non lo era prima, imposta la data. Altrimenti, mantieni la data esistente se è pagato, o cancellala se non lo è più.
           paidAt: isNowPaid && !wasAlreadyPaid ? new Date().toISOString() : (isNowPaid ? p.paidAt : undefined)
         };
       }
@@ -487,6 +484,25 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   };
 
   const selectedClient = useMemo(() => clients.find(c => c.id === selectedView), [clients, selectedView]);
+
+  const inactiveClients = useMemo(() => {
+    const projectsByClient = new Map<string, Project[]>();
+    projects.forEach(p => {
+        if (!projectsByClient.has(p.clientId)) {
+            projectsByClient.set(p.clientId, []);
+        }
+        projectsByClient.get(p.clientId)!.push(p);
+    });
+
+    const inactiveSet = new Set<string>();
+    clients.forEach(client => {
+        const clientProjects = projectsByClient.get(client.id) || [];
+        if (clientProjects.length > 0 && clientProjects.every(p => p.paymentStatus === PaymentStatus.Pagato)) {
+            inactiveSet.add(client.id);
+        }
+    });
+    return inactiveSet;
+  }, [clients, projects]);
 
   return (
     <div className="flex h-screen font-sans">
@@ -511,10 +527,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             <h2 className="text-sm font-semibold text-gray-400 mt-6 mb-2 px-3 uppercase">Clienti</h2>
             <ul>
                 {clients.map((client, index) => {
-                    const clientProjects = projects.filter(p => p.clientId === client.id);
-                    const isInactive = clientProjects.length > 0 && clientProjects.every(
-                        p => p.paymentStatus === PaymentStatus.Pagato
-                    );
+                    const isInactive = inactiveClients.has(client.id);
 
                     return (
                         <li key={client.id}
