@@ -26,56 +26,25 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   const [projects, setProjects] = useState<Project[]>(initialData.projects);
   const [todos, setTodos] = useState<Todo[]>(initialData.todos);
 
-  // Refs per una gestione robusta del salvataggio
-  const dataRef = useRef({ clients, projects, todos });
-  const hasUnsavedChanges = useRef(false);
-  const isInitialLoad = useRef(true);
+  const isInitialMount = useRef(true);
 
-  // Aggiorna il ref con i dati più recenti quando lo stato cambia
+  // Effetto per il salvataggio automatico e debounced su Firestore
   useEffect(() => {
-    dataRef.current = { clients, projects, todos };
-  }, [clients, projects, todos]);
+    // Salta il primo render (mount) per non risalvare i dati appena caricati
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
 
-  // Effetto per il salvataggio con debounce
-  useEffect(() => {
-    if (isInitialLoad.current) return; // Non salvare al caricamento iniziale
-
-    hasUnsavedChanges.current = true;
+    // Imposta un timer per salvare i dati dopo 1 secondo dall'ultima modifica.
+    // Questo previene salvataggi eccessivi durante modifiche rapide.
     const handler = setTimeout(() => {
-      firebaseService.saveData(userId, dataRef.current);
-      hasUnsavedChanges.current = false; // Resetta il flag dopo il salvataggio
-    }, 1500); // Un debounce leggermente più lungo per raggruppare più modifiche
+      firebaseService.saveData(userId, { clients, projects, todos });
+    }, 1000); // Debounce di 1 secondo
 
+    // Pulisce il timer se il componente viene smontato o se i dati cambiano di nuovo
     return () => clearTimeout(handler);
   }, [clients, projects, todos, userId]);
-
-  // Effetto per il SALVATAGGIO DI EMERGENZA prima di chiudere la pagina
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (hasUnsavedChanges.current) {
-        // Questa chiamata è un tentativo "best-effort".
-        // Tenta di salvare forzatamente i dati non sincronizzati.
-        firebaseService.saveData(userId, dataRef.current);
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [userId]); // Dipende solo da userId
-
-  // Effetto per gestire il caricamento iniziale dei dati e inizializzare i ref
-  useEffect(() => {
-    setClients(initialData.clients);
-    setProjects(initialData.projects);
-    setTodos(initialData.todos);
-
-    const timer = setTimeout(() => {
-      isInitialLoad.current = false;
-      hasUnsavedChanges.current = false; // Lo stato iniziale è "salvato"
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [initialData]);
 
 
   const [selectedView, setSelectedView] = useState<string>('dashboard');
