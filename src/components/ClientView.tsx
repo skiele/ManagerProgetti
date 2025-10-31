@@ -1,7 +1,8 @@
 
+
 import React from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from '../types';
-import { PlusIcon } from './icons';
+import { PlusIcon, SparklesIcon } from './icons';
 import ProjectCard from './ProjectCard';
 
 interface ClientViewProps {
@@ -12,22 +13,28 @@ interface ClientViewProps {
     onUpdateProjectPaymentStatus: (id: string, status: PaymentStatus) => void;
     onToggleTodo: (id: string, completed: boolean) => void;
     onAddProject: (clientId: string) => void;
+    onAiAddProject: (clientId: string) => void;
     onAddTodo: (projectId: string) => void;
     onDeleteProject: (id: string) => void;
     onDeleteTodo: (id: string) => void;
     onUpdateProjectNotes: (id: string, notes: string) => void;
 }
 
-const ClientView: React.FC<ClientViewProps> = ({ client, projects, todos, onUpdateProjectWorkStatus, onUpdateProjectPaymentStatus, onToggleTodo, onAddProject, onAddTodo, onDeleteProject, onDeleteTodo, onUpdateProjectNotes }) => (
+const ClientView: React.FC<ClientViewProps> = ({ client, projects, todos, onUpdateProjectWorkStatus, onUpdateProjectPaymentStatus, onToggleTodo, onAddProject, onAiAddProject, onAddTodo, onDeleteProject, onDeleteTodo, onUpdateProjectNotes }) => (
     <div>
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 gap-2 flex-wrap">
             <div>
                 <h1 className="text-3xl font-bold">{client.name}</h1>
                 {client.email && <p className="text-gray-500">{client.email}</p>}
             </div>
-            <button onClick={() => onAddProject(client.id)} className="bg-primary text-white px-4 py-2 rounded-lg font-semibold flex items-center hover:bg-secondary transition-colors shadow-lg">
-                <PlusIcon className="w-5 h-5 mr-2"/> Nuovo Progetto
-            </button>
+            <div className="flex gap-2">
+                <button onClick={() => onAddProject(client.id)} className="bg-primary text-white px-4 py-2 rounded-lg font-semibold flex items-center hover:bg-secondary transition-colors shadow-lg">
+                    <PlusIcon className="w-5 h-5 mr-2"/> Nuovo Progetto
+                </button>
+                <button onClick={() => onAiAddProject(client.id)} className="bg-accent text-white px-4 py-2 rounded-lg font-semibold flex items-center hover:bg-opacity-80 transition-colors shadow-lg">
+                    <SparklesIcon className="w-5 h-5 mr-2"/> Crea con AI
+                </button>
+            </div>
         </div>
         <div className="space-y-6">
             {projects.map(project => (

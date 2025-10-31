@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
-import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon } from './components/icons';
+import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
 import LoginScreen from './components/LoginScreen';
@@ -8,6 +8,7 @@ import SetupScreen from './components/SetupScreen';
 import Dashboard from './components/Dashboard';
 import ClientView from './components/ClientView';
 import * as firebaseService from './services/firebaseService';
+import { GoogleGenAI, Type } from '@google/genai';
 
 type AppState = 'setup' | 'login' | 'loading' | 'authenticated';
 type AppData = {
@@ -33,6 +34,10 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
   const [modalContent, setModalContent] = useState<'client' | 'project' | 'todo' | null>(null);
   const [currentContextId, setCurrentContextId] = useState<string | null>(null);
 
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [aiContextClientId, setAiContextClientId] = useState<string | null>(null);
+
+
   const [filterYear, setFilterYear] = useState('all');
   const [filterMonth, setFilterMonth] = useState('all');
 
@@ -41,7 +46,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
     setClients(prev => [...prev, newClient]);
   };
   
-  const handleAddProject = (clientId: string, name: string, value: number) => {
+  const handleAddProject = (clientId: string, name: string, value: number, notes?: string): Project => {
     const newProject: Project = { 
       id: crypto.randomUUID(), 
       clientId, 
@@ -49,9 +54,11 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
       value, 
       workStatus: WorkStatus.PreventivoDaInviare, 
       paymentStatus: PaymentStatus.DaFatturare, 
-      createdAt: new Date().toISOString() 
+      createdAt: new Date().toISOString(),
+      notes
     };
     setProjects(prev => [...prev, newProject]);
+    return newProject;
   };
 
   const handleAddTodo = (projectId: string, task: string, income: number, dueDate?: string) => {
@@ -93,6 +100,11 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
     setIsModalOpen(true);
   };
   
+  const openAiModal = (clientId: string) => {
+    setAiContextClientId(clientId);
+    setIsAiModalOpen(true);
+  };
+
   // Drag and drop handlers for client reordering
   const handleDragStart = (e: React.DragEvent<HTMLLIElement>, index: number) => {
     e.dataTransfer.setData("clientIndex", index.toString());
@@ -191,6 +203,98 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
         {renderFormFields()}
         <button type="submit" className="w-full bg-primary text-white py-2 rounded-lg font-semibold hover:bg-secondary transition-colors">Aggiungi</button>
     </form>
+  };
+
+  const AiFormComponent = ({ clientId, onComplete }: { clientId: string; onComplete: () => void }) => {
+    const [description, setDescription] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!description) return;
+        setLoading(true);
+        setError('');
+
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            const schema = {
+                type: Type.OBJECT,
+                properties: {
+                    projectName: { type: Type.STRING, description: "Nome conciso e professionale per il progetto." },
+                    projectValue: { type: Type.NUMBER, description: "Valore economico di partenza plausibile in Euro." },
+                    projectNotes: { type: Type.STRING, description: "Breve nota iniziale per contestualizzare il progetto." },
+                    todos: {
+                        type: Type.ARRAY,
+                        description: "Lista di 3-5 to-do comuni per questo tipo di progetto.",
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                task: { type: Type.STRING, description: "Descrizione dell'attività da svolgere." },
+                                income: { type: Type.NUMBER, description: "Piccolo incasso associato, 0 se non applicabile." }
+                            },
+                            required: ["task", "income"]
+                        }
+                    }
+                },
+                required: ["projectName", "projectValue", "projectNotes", "todos"]
+            };
+
+            const prompt = `Sei un assistente per un project manager freelance.
+            Dato il seguente brief di progetto, genera:
+            1. Un nome conciso e professionale per il progetto.
+            2. Un valore economico di partenza plausibile in Euro (solo il numero).
+            3. Una breve nota iniziale per il progetto.
+            4. Una lista di 3-5 to-do comuni per questo tipo di progetto, con un piccolo incasso associato a ciascuno (0 se non applicabile).
+            
+            Brief del progetto: "${description}"
+            
+            Fornisci la risposta esclusivamente in formato JSON, rispettando lo schema fornito.`;
+            
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: schema,
+                }
+            });
+
+            const result = JSON.parse(response.text);
+
+            const newProject = handleAddProject(clientId, result.projectName, result.projectValue, result.projectNotes);
+
+            if (result.todos && Array.isArray(result.todos)) {
+                result.todos.forEach((todo: { task: string; income: number }) => {
+                    handleAddTodo(newProject.id, todo.task, todo.income);
+                });
+            }
+            onComplete();
+        } catch (err) {
+            console.error("Errore durante la generazione AI:", err);
+            setError('Non è stato possibile generare il progetto. Riprova.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <textarea
+          placeholder="Descrivi brevemente il progetto (es. 'Sito e-commerce per un negozio di abbigliamento')"
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4"
+          rows={4}
+          required
+          disabled={loading}
+        />
+        {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+        <button type="submit" className="w-full bg-accent text-white py-2 rounded-lg font-semibold hover:bg-opacity-80 transition-opacity flex items-center justify-center disabled:bg-gray-400" disabled={loading}>
+            {loading ? 'Generazione in corso...' : <><SparklesIcon className="w-5 h-5 mr-2"/> Genera Progetto</>}
+        </button>
+      </form>
+    );
   };
 
   const availableYears = useMemo(() => {
@@ -356,6 +460,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
                 onUpdateProjectPaymentStatus={handleUpdateProjectPaymentStatus}
                 onToggleTodo={handleToggleTodo}
                 onAddProject={(clientId) => openModal('project', clientId)}
+                onAiAddProject={openAiModal}
                 onAddTodo={(projectId) => openModal('todo', projectId)}
                 onDeleteProject={handleDeleteProject}
                 onDeleteTodo={handleDeleteTodo}
@@ -375,6 +480,15 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; currentUse
       >
         <FormComponent />
       </Modal>
+
+      <Modal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        title="Crea Progetto con AI"
+      >
+        {aiContextClientId && <AiFormComponent clientId={aiContextClientId} onComplete={() => setIsAiModalOpen(false)} />}
+      </Modal>
+
     </div>
   );
 };
