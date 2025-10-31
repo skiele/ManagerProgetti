@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
 import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon } from './components/icons';
@@ -26,35 +25,56 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   const [clients, setClients] = useState<Client[]>(initialData.clients);
   const [projects, setProjects] = useState<Project[]>(initialData.projects);
   const [todos, setTodos] = useState<Todo[]>(initialData.todos);
-  const isInitialLoad = useRef(true);
-  
-  // Effetto per salvare i dati ad ogni modifica
-  useEffect(() => {
-    // CORREZIONE CRITICA: Impedisce il salvataggio al primo caricamento.
-    // Il salvataggio avviene solo dopo che l'utente ha interagito e modificato i dati.
-    if (isInitialLoad.current) {
-        return;
-    }
 
+  // Refs per una gestione robusta del salvataggio
+  const dataRef = useRef({ clients, projects, todos });
+  const hasUnsavedChanges = useRef(false);
+  const isInitialLoad = useRef(true);
+
+  // Aggiorna il ref con i dati più recenti quando lo stato cambia
+  useEffect(() => {
+    dataRef.current = { clients, projects, todos };
+  }, [clients, projects, todos]);
+
+  // Effetto per il salvataggio con debounce
+  useEffect(() => {
+    if (isInitialLoad.current) return; // Non salvare al caricamento iniziale
+
+    hasUnsavedChanges.current = true;
     const handler = setTimeout(() => {
-      firebaseService.saveData(userId, { clients, projects, todos });
-    }, 1000); // Debounce saving to avoid too many writes
-    
+      firebaseService.saveData(userId, dataRef.current);
+      hasUnsavedChanges.current = false; // Resetta il flag dopo il salvataggio
+    }, 1500); // Un debounce leggermente più lungo per raggruppare più modifiche
+
     return () => clearTimeout(handler);
   }, [clients, projects, todos, userId]);
 
-  // Sincronizza lo stato se i dati iniziali cambiano (es. primo caricamento)
-  // e imposta il flag per permettere i salvataggi successivi
+  // Effetto per il SALVATAGGIO DI EMERGENZA prima di chiudere la pagina
   useEffect(() => {
-      setClients(initialData.clients);
-      setProjects(initialData.projects);
-      setTodos(initialData.todos);
-      
-      // Dopo il primo caricamento, i salvataggi futuri sono permessi.
-      const timer = setTimeout(() => {
-          isInitialLoad.current = false;
-      }, 500); // Piccolo ritardo per sicurezza
-      return () => clearTimeout(timer);
+    const handleBeforeUnload = () => {
+      if (hasUnsavedChanges.current) {
+        // Questa chiamata è un tentativo "best-effort".
+        // Tenta di salvare forzatamente i dati non sincronizzati.
+        firebaseService.saveData(userId, dataRef.current);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [userId]); // Dipende solo da userId
+
+  // Effetto per gestire il caricamento iniziale dei dati e inizializzare i ref
+  useEffect(() => {
+    setClients(initialData.clients);
+    setProjects(initialData.projects);
+    setTodos(initialData.todos);
+
+    const timer = setTimeout(() => {
+      isInitialLoad.current = false;
+      hasUnsavedChanges.current = false; // Lo stato iniziale è "salvato"
+    }, 500);
+
+    return () => clearTimeout(timer);
   }, [initialData]);
 
 
@@ -529,7 +549,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         <div className="space-y-2 mt-4 flex-shrink-0">
             <button onClick={() => openModal('client')} className="w-full bg-accent text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-opacity-80 transition-opacity"><PlusIcon className="w-5 h-5 mr-2"/> Nuovo Cliente</button>
         </div>
-        <div className="mt-auto pt-4 text-center text-xs text-gray-400 flex-shrink-0">v1.4.0</div>
+        <div className="mt-auto pt-4 text-center text-xs text-gray-400 flex-shrink-0">v1.5.0</div>
       </aside>
 
       <main className="flex-1 p-8 overflow-y-auto">
