@@ -63,20 +63,31 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     localStorage.setItem('theme', theme);
   }, [theme]);
   
+  // Questo effetto imposta un observer per gestire i ridimensionamenti della finestra
   useEffect(() => {
     const navElement = navRef.current;
     if (!navElement) return;
 
-    // Observer to detect when the nav content size changes
     const resizeObserver = new ResizeObserver(() => {
         setIsNavScrollable(navElement.scrollHeight > navElement.clientHeight);
     });
 
     resizeObserver.observe(navElement);
 
-    // Cleanup observer on component unmount
     return () => resizeObserver.disconnect();
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []);
+
+  // Questo effetto forza il ricalcolo quando la lista dei clienti cambia
+  useEffect(() => {
+    const navElement = navRef.current;
+    if (navElement) {
+        // Un piccolo timeout per assicurarsi che il DOM sia aggiornato
+        const timer = setTimeout(() => {
+            setIsNavScrollable(navElement.scrollHeight > navElement.clientHeight);
+        }, 100);
+        return () => clearTimeout(timer);
+    }
+  }, [clients]); // Dipendenza chiave: la lista dei clienti
 
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
