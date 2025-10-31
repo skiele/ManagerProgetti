@@ -28,22 +28,20 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
   const isInitialMount = useRef(true);
 
-  // Effetto per il salvataggio automatico e debounced su Firestore
+  // Effetto per il salvataggio automatico e IMMEDIATO su Firestore.
+  // L'approccio con debounce (ritardo) è stato rimosso perché creava una "race condition"
+  // in cui un refresh rapido della pagina poteva avvenire prima del salvataggio, causando la perdita di dati.
   useEffect(() => {
-    // Salta il primo render (mount) per non risalvare i dati appena caricati
+    // Salta il primo render (mount) per non risalvare i dati appena caricati.
     if (isInitialMount.current) {
       isInitialMount.current = false;
       return;
     }
 
-    // Imposta un timer per salvare i dati dopo 1 secondo dall'ultima modifica.
-    // Questo previene salvataggi eccessivi durante modifiche rapide.
-    const handler = setTimeout(() => {
-      firebaseService.saveData(userId, { clients, projects, todos });
-    }, 1000); // Debounce di 1 secondo
-
-    // Pulisce il timer se il componente viene smontato o se i dati cambiano di nuovo
-    return () => clearTimeout(handler);
+    // A ogni successiva modifica dei dati, salva immediatamente sul database.
+    // Questo è il modo più affidabile per garantire la persistenza dei dati.
+    firebaseService.saveData(userId, { clients, projects, todos });
+    
   }, [clients, projects, todos, userId]);
 
 
