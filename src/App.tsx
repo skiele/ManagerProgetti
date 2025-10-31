@@ -26,24 +26,16 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   const [projects, setProjects] = useState<Project[]>(initialData.projects);
   const [todos, setTodos] = useState<Todo[]>(initialData.todos);
 
-  const isInitialMount = useRef(true);
-
-  // Effetto per il salvataggio automatico e IMMEDIATO su Firestore.
-  // L'approccio con debounce (ritardo) è stato rimosso perché creava una "race condition"
-  // in cui un refresh rapido della pagina poteva avvenire prima del salvataggio, causando la perdita di dati.
-  useEffect(() => {
-    // Salta il primo render (mount) per non risalvare i dati appena caricati.
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-
-    // A ogni successiva modifica dei dati, salva immediatamente sul database.
-    // Questo è il modo più affidabile per garantire la persistenza dei dati.
-    firebaseService.saveData(userId, { clients, projects, todos });
-    
-  }, [clients, projects, todos, userId]);
-
+  // Helper function to save the current state to Firestore
+  const saveDataToCloud = (updatedData: Partial<AppData>) => {
+    const fullData = {
+      clients,
+      projects,
+      todos,
+      ...updatedData,
+    };
+    firebaseService.saveData(userId, fullData);
+  };
 
   const [selectedView, setSelectedView] = useState<string>('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -153,7 +145,11 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
   const handleAddClient = (name: string, email?: string) => {
     const newClient: Client = { id: crypto.randomUUID(), name, email };
-    setClients(prev => [...prev, newClient]);
+    setClients(prev => {
+      const newClients = [...prev, newClient];
+      saveDataToCloud({ clients: newClients });
+      return newClients;
+    });
   };
   
   const handleAddProject = (clientId: string, name: string, value: number, notes?: string): Project => {
@@ -167,13 +163,21 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
       createdAt: new Date().toISOString(),
       notes
     };
-    setProjects(prev => [...prev, newProject]);
+    setProjects(prev => {
+      const newProjects = [...prev, newProject];
+      saveDataToCloud({ projects: newProjects });
+      return newProjects;
+    });
     return newProject;
   };
 
   const handleAddTodo = (projectId: string, task: string, income: number, dueDate?: string) => {
     const newTodo: Todo = { id: crypto.randomUUID(), projectId, task, income, completed: false, dueDate };
-    setTodos(prev => [...prev, newTodo]);
+    setTodos(prev => {
+      const newTodos = [...prev, newTodo];
+      saveDataToCloud({ todos: newTodos });
+      return newTodos;
+    });
   };
   
   const handleDuplicateProject = (projectId: string) => {
@@ -198,8 +202,15 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         completed: false,
     }));
 
-    setProjects(prev => [...prev, newProject]);
-    setTodos(prev => [...prev, ...newTodos]);
+    setProjects(prev => {
+      const newProjects = [...prev, newProject];
+      setTodos(prevTodos => {
+        const updatedTodos = [...prevTodos, ...newTodos];
+        saveDataToCloud({ projects: newProjects, todos: updatedTodos });
+        return updatedTodos;
+      });
+      return newProjects;
+    });
   };
 
   const handleDeleteClient = (clientId: string) => {
@@ -207,9 +218,14 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         const projectsToDelete = projects.filter(p => p.clientId === clientId);
         const projectIdsToDelete = projectsToDelete.map(p => p.id);
         
-        setTodos(prev => prev.filter(t => !projectIdsToDelete.includes(t.projectId)));
-        setProjects(prev => prev.filter(p => p.clientId !== clientId));
-        setClients(prev => prev.filter(c => c.id !== clientId));
+        const newTodos = todos.filter(t => !projectIdsToDelete.includes(t.projectId));
+        const newProjects = projects.filter(p => p.clientId !== clientId);
+        const newClients = clients.filter(c => c.id !== clientId);
+
+        setTodos(newTodos);
+        setProjects(newProjects);
+        setClients(newClients);
+        saveDataToCloud({ clients: newClients, projects: newProjects, todos: newTodos });
 
         if (selectedView === clientId) {
             setSelectedView('dashboard');
@@ -219,14 +235,21 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
   const handleDeleteProject = (projectId: string) => {
       if (window.confirm('Sei sicuro di voler eliminare questo progetto? Verranno eliminate anche tutte le sue attività.')) {
-          setTodos(prev => prev.filter(t => t.projectId !== projectId));
-          setProjects(prev => prev.filter(p => p.id !== projectId));
+          const newTodos = todos.filter(t => t.projectId !== projectId);
+          const newProjects = projects.filter(p => p.id !== projectId);
+          setTodos(newTodos);
+          setProjects(newProjects);
+          saveDataToCloud({ projects: newProjects, todos: newTodos });
       }
   };
 
   const handleDeleteTodo = (todoId: string) => {
     if (window.confirm('Sei sicuro di voler eliminare questa attività?')) {
-      setTodos(prev => prev.filter(t => t.id !== todoId));
+      setTodos(prev => {
+        const newTodos = prev.filter(t => t.id !== todoId);
+        saveDataToCloud({ todos: newTodos });
+        return newTodos;
+      });
     }
   };
 
@@ -271,6 +294,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     reorderedClients.splice(dropIndex, 0, draggedClient);
 
     setClients(reorderedClients);
+    saveDataToCloud({ clients: reorderedClients });
   };
   
   const handleDragEnd = (e: React.DragEvent<HTMLLIElement>) => e.currentTarget.classList.remove('opacity-50', 'bg-primary');
@@ -453,11 +477,30 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   }, [clients, projects]);
   
 
-  const handleUpdateProjectWorkStatus = (id: string, workStatus: WorkStatus) => setProjects(prev => prev.map(p => p.id === id ? { ...p, workStatus } : p));
-  const handleToggleTodo = (id: string, completed: boolean) => setTodos(prev => prev.map(t => t.id === id ? { ...t, completed } : t));
-  const handleUpdateProjectNotes = (id: string, notes: string) => setProjects(prev => prev.map(p => p.id === id ? { ...p, notes } : p));
+  const handleUpdateProjectWorkStatus = (id: string, workStatus: WorkStatus) => setProjects(prev => {
+    const newProjects = prev.map(p => p.id === id ? { ...p, workStatus } : p);
+    saveDataToCloud({ projects: newProjects });
+    return newProjects;
+  });
+
+  const handleToggleTodo = (id: string, completed: boolean) => setTodos(prev => {
+    const newTodos = prev.map(t => t.id === id ? { ...t, completed } : t);
+    saveDataToCloud({ todos: newTodos });
+    return newTodos;
+  });
+
+  const handleUpdateProjectNotes = (id: string, notes: string) => setProjects(prev => {
+    const newProjects = prev.map(p => p.id === id ? { ...p, notes } : p);
+    saveDataToCloud({ projects: newProjects });
+    return newProjects;
+  });
+
   const handleUpdateProjectPaymentStatus = (id: string, paymentStatus: PaymentStatus) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, paymentStatus, paidAt: paymentStatus === PaymentStatus.Pagato ? (p.paidAt || new Date().toISOString()) : undefined } : p));
+    setProjects(prev => {
+      const newProjects = prev.map(p => p.id === id ? { ...p, paymentStatus, paidAt: paymentStatus === PaymentStatus.Pagato ? (p.paidAt || new Date().toISOString()) : undefined } : p);
+      saveDataToCloud({ projects: newProjects });
+      return newProjects;
+    });
   };
 
   const selectedClient = useMemo(() => clients.find(c => c.id === selectedView), [clients, selectedView]);
