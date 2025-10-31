@@ -17,30 +17,40 @@ interface IncomeChartProps {
 
 const IncomeChart: React.FC<IncomeChartProps> = ({ clients, projects, todos }) => {
 
-  const data = useMemo(() => {
-    // 1. Ottimizzazione: Raggruppa i totali dei to-do per progetto per evitare cicli annidati.
-    const todoTotalsByProject = new Map<string, number>();
+  // --- OTTIMIZZAZIONE PERFORMANCE ---
+  // 1. Calcola i totali dei to-do una sola volta
+  const todoTotalsByProject = useMemo(() => {
+    const map = new Map<string, number>();
     todos.forEach(todo => {
-      todoTotalsByProject.set(todo.projectId, (todoTotalsByProject.get(todo.projectId) || 0) + todo.income);
+      map.set(todo.projectId, (map.get(todo.projectId) || 0) + todo.income);
     });
+    return map;
+  }, [todos]);
 
-    // 2. Ottimizzazione: Calcola il valore totale di ogni progetto una sola volta.
-    const projectTotals = new Map<string, number>();
+  // 2. Calcola i totali dei progetti una sola volta
+  const projectTotals = useMemo(() => {
+    const map = new Map<string, number>();
     projects.forEach(p => {
       const tasksTotal = todoTotalsByProject.get(p.id) || 0;
-      projectTotals.set(p.id, p.value + tasksTotal);
+      map.set(p.id, p.value + tasksTotal);
     });
+    return map;
+  }, [projects, todoTotalsByProject]);
 
-    // 3. Ottimizzazione: Raggruppa i progetti per cliente per un accesso rapido.
-    const projectsByClient = new Map<string, Project[]>();
+  // 3. Raggruppa i progetti per cliente una sola volta
+  const projectsByClient = useMemo(() => {
+    const map = new Map<string, Project[]>();
     projects.forEach(p => {
-      if (!projectsByClient.has(p.clientId)) {
-        projectsByClient.set(p.clientId, []);
+      if (!map.has(p.clientId)) {
+        map.set(p.clientId, []);
       }
-      projectsByClient.get(p.clientId)!.push(p);
+      map.get(p.clientId)!.push(p);
     });
+    return map;
+  }, [projects]);
 
-    // 4. Calcola i dati per il grafico in modo efficiente.
+  // 4. Calcola i dati finali del grafico basandosi sulle mappe pre-calcolate
+  const data = useMemo(() => {
     const chartData = clients.map(client => {
       const clientProjects = projectsByClient.get(client.id) || [];
       let incassati = 0;
@@ -70,7 +80,7 @@ const IncomeChart: React.FC<IncomeChartProps> = ({ clients, projects, todos }) =
     }).filter(d => d.incassati > 0 || d.futuri > 0 || d.potenziali > 0);
 
     return chartData;
-  }, [clients, projects, todos]);
+  }, [clients, projectsByClient, projectTotals]);
 
 
   if (data.length === 0) {

@@ -480,15 +480,21 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
   const selectedClient = useMemo(() => clients.find(c => c.id === selectedView), [clients, selectedView]);
 
-  const inactiveClients = useMemo(() => {
-    const projectsByClient = new Map<string, Project[]>();
+  // --- OTTIMIZZAZIONE PERFORMANCE ---
+  // 1. Raggruppa i progetti per cliente una sola volta
+  const projectsByClient = useMemo(() => {
+    const map = new Map<string, Project[]>();
     projects.forEach(p => {
-        if (!projectsByClient.has(p.clientId)) {
-            projectsByClient.set(p.clientId, []);
+        if (!map.has(p.clientId)) {
+            map.set(p.clientId, []);
         }
-        projectsByClient.get(p.clientId)!.push(p);
+        map.get(p.clientId)!.push(p);
     });
+    return map;
+  }, [projects]);
 
+  // 2. Calcola i clienti inattivi basandosi sulla mappa pre-calcolata
+  const inactiveClients = useMemo(() => {
     const inactiveSet = new Set<string>();
     clients.forEach(client => {
         const clientProjects = projectsByClient.get(client.id) || [];
@@ -497,7 +503,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         }
     });
     return inactiveSet;
-  }, [clients, projects]);
+  }, [clients, projectsByClient]);
+
 
   return (
     <div className="flex h-screen font-sans">
