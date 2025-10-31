@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from './types';
-import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon } from './components/icons';
+import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
 import LoginScreen from './components/LoginScreen';
@@ -59,6 +59,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   const [filterMonth, setFilterMonth] = useState('all');
   
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'dark');
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -66,11 +68,85 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     root.classList.add(theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target as Node)) {
+            setIsSettingsMenuOpen(false);
+        }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
   
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
   }
 
+  const handleExportData = async () => {
+    setIsSettingsMenuOpen(false);
+    try {
+        const currentCloudData = await firebaseService.getData(userId);
+        const dataStr = JSON.stringify(currentCloudData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        const timestamp = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
+        link.download = `progetta_backup_${timestamp}.json`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error("Errore durante l'esportazione dei dati:", error);
+        alert("Si è verificato un errore durante l'esportazione. Controlla la console per i dettagli.");
+    }
+  };
+
+  const handleImportData = () => {
+      setIsSettingsMenuOpen(false);
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = (e) => {
+          const file = (e.target as HTMLInputElement).files?.[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+              try {
+                  const content = event.target?.result;
+                  if (typeof content !== 'string') throw new Error("Contenuto del file non valido.");
+                  
+                  const importedData = JSON.parse(content);
+
+                  if (!('clients' in importedData && 'projects' in importedData && 'todos' in importedData)) {
+                      throw new Error("Il file di backup non è valido o è corrotto.");
+                  }
+
+                  const confirmation = window.confirm(
+                      "ATTENZIONE!\n\nStai per sovrascrivere TUTTI i dati presenti sul cloud con il contenuto di questo file.\n\nQuesta azione è IRREVERSIBILE.\n\nSei assolutamente sicuro di voler procedere?"
+                  );
+
+                  if (confirmation) {
+                      await firebaseService.saveData(userId, importedData);
+                      setClients(importedData.clients);
+                      setProjects(importedData.projects);
+                      setTodos(importedData.todos);
+                      alert("Dati importati e salvati sul cloud con successo!");
+                  }
+              } catch (error) {
+                  console.error("Errore durante l'importazione dei dati:", error);
+                  alert(`Si è verificato un errore durante l'importazione: ${error instanceof Error ? error.message : String(error)}`);
+              }
+          };
+          reader.readAsText(file);
+      };
+      input.click();
+  };
 
   const handleAddClient = (name: string, email?: string) => {
     const newClient: Client = { id: crypto.randomUUID(), name, email };
@@ -395,6 +471,23 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Cambia tema">
                     {theme === 'light' ? <MoonIcon className="w-5 h-5"/> : <SunIcon className="w-5 h-5"/>}
                 </button>
+                <div className="relative" ref={settingsMenuRef}>
+                    <button onClick={() => setIsSettingsMenuOpen(prev => !prev)} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Opzioni e Backup">
+                        <CogIcon className="w-5 h-5"/>
+                    </button>
+                    {isSettingsMenuOpen && (
+                        <div className="absolute bottom-full right-0 mb-2 w-48 bg-gray-700 rounded-md shadow-lg py-1 z-10 border border-gray-600">
+                            <button onClick={handleExportData} className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-primary transition-colors flex items-center gap-3">
+                                <DownloadIcon className="w-4 h-4" /> 
+                                <span>Esporta Backup</span>
+                            </button>
+                            <button onClick={handleImportData} className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-primary transition-colors flex items-center gap-3">
+                                <UploadIcon className="w-4 h-4" /> 
+                                <span>Importa Backup</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
                  <button onClick={onLogout} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Esci">
                     <LogOutIcon className="w-5 h-5"/>
                 </button>

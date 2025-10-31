@@ -116,17 +116,19 @@ export const getData = async (userId: string): Promise<AppData> => {
   const userDocSnap = await getDoc(userDocRef);
 
   if (userDocSnap.exists()) {
-    return userDocSnap.data() as AppData;
-  } else {
-    // L'utente è autenticato ma non ha un documento dati.
-    // Questo può accadere dopo la registrazione o se il db viene cancellato.
-    // Proviamo a migrare i dati da localStorage come fallback.
-    const migratedData = await migrateLegacyDataFromLocalStorage(userId);
-    if (migratedData) {
-      return migratedData; // I dati sono già stati salvati da migrateLegacy...
+    const data = userDocSnap.data() as AppData;
+    // Esegue una migrazione interna non distruttiva se i dati sono in formato legacy
+    const migratedProjects = projectMigrator(data.projects || []);
+    if (JSON.stringify(migratedProjects) !== JSON.stringify(data.projects)) {
+      console.log("Formato dati legacy rilevato. L'aggiornamento avverrà al prossimo salvataggio automatico.");
+      return { ...data, projects: migratedProjects };
     }
-    // Se non ci sono dati da migrare, creo un documento vuoto
-    await setDoc(userDocRef, initialData);
+    return data;
+  } else {
+    // REGOLA DI SICUREZZA CRITICA: Non creare mai un documento qui.
+    // La creazione avviene solo durante la registrazione. Questo previene la sovrascrittura
+    // di dati in caso di errori di rete temporanei o race conditions.
+    console.warn(`Documento utente non trovato per l'UID: ${userId}. Verrà restituito uno stato vuoto. I dati NON verranno sovrascritti sul cloud.`);
     return initialData;
   }
 };

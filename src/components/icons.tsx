@@ -147,3 +147,10 @@ export const MoonIcon: React.FC<IconProps> = ({ className }) => (
         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
     </svg>
 );
+
+export const CogIcon: React.FC<IconProps> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.63l-1.42-2.44a.5.5 0 0 0-.61-.22l-2.49 1a9.61 9.61 0 0 0-1.64-.94l-.38-2.68a.5.5 0 0 0-.5-.43h-2.84a.5.5 0 0 0-.5.43l-.38 2.68a9.61 9.61 0 0 0-1.64.94l-2.49-1a.5.5 0 0 0-.61.22l-1.42 2.44a.5.5 0 0 0 .12.63l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.5.5 0 0 0-.12.63l1.42 2.44a.5.5 0 0 0 .61.22l2.49-1a9.61 9.61 0 0 0 1.64.94l.38 2.68a.5.5 0 0 0 .5.43h2.84a.5.5 0 0 0 .5-.43l.38-2.68a9.61 9.61 0 0 0 1.64-.94l2.49 1a.5.5 0 0 0 .61-.22l1.42-2.44a.5.5 0 0 0-.12-.63l-2.03-1.58z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+    </svg>
+);
