@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Client, Project, Todo, WorkStatus, PaymentStatus } from '../types';
 
@@ -16,40 +16,58 @@ interface IncomeChartProps {
 }
 
 const IncomeChart: React.FC<IncomeChartProps> = ({ clients, projects, todos }) => {
-  const getProjectTotal = (project: Project) => {
-    const tasksTotal = todos
-      .filter(todo => todo.projectId === project.id)
-      .reduce((sum, todo) => sum + todo.income, 0);
-    return project.value + tasksTotal;
-  };
-  
-  const data: ChartData[] = clients.map(client => {
-    const clientProjects = projects.filter(p => p.clientId === client.id);
-    let incassati = 0;
-    let futuri = 0;
-    let potenziali = 0;
 
-    clientProjects.forEach(p => {
-        if (p.workStatus === WorkStatus.Annullato) return;
-
-        const projectTotal = getProjectTotal(p);
-
-        if (p.paymentStatus === PaymentStatus.Pagato) {
-            incassati += projectTotal;
-        } else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) {
-            futuri += projectTotal;
-        } else if (p.workStatus === WorkStatus.PreventivoDaInviare || p.workStatus === WorkStatus.PreventivoInviato) {
-            potenziali += projectTotal;
-        }
+  const data = useMemo(() => {
+    // 1. Mappa i totali di ogni progetto per evitare calcoli ripetuti
+    const projectTotals = new Map<string, number>();
+    projects.forEach(p => {
+      const tasksTotal = todos
+        .filter(todo => todo.projectId === p.id)
+        .reduce((sum, todo) => sum + todo.income, 0);
+      projectTotals.set(p.id, p.value + tasksTotal);
     });
 
-    return {
-      name: client.name,
-      incassati,
-      futuri,
-      potenziali,
-    };
-  }).filter(d => d.incassati > 0 || d.futuri > 0 || d.potenziali > 0);
+    // 2. Raggruppa i progetti per cliente per un accesso più rapido
+    const projectsByClient = new Map<string, Project[]>();
+    projects.forEach(p => {
+      if (!projectsByClient.has(p.clientId)) {
+        projectsByClient.set(p.clientId, []);
+      }
+      projectsByClient.get(p.clientId)!.push(p);
+    });
+
+    // 3. Calcola i dati per il grafico in modo efficiente
+    const chartData = clients.map(client => {
+      const clientProjects = projectsByClient.get(client.id) || [];
+      let incassati = 0;
+      let futuri = 0;
+      let potenziali = 0;
+
+      clientProjects.forEach(p => {
+        if (p.workStatus === WorkStatus.Annullato) return;
+
+        const projectTotal = projectTotals.get(p.id) || 0;
+
+        if (p.paymentStatus === PaymentStatus.Pagato) {
+          incassati += projectTotal;
+        } else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) {
+          futuri += projectTotal;
+        } else if (p.workStatus === WorkStatus.PreventivoDaInviare || p.workStatus === WorkStatus.PreventivoInviato) {
+          potenziali += projectTotal;
+        }
+      });
+
+      return {
+        name: client.name,
+        incassati,
+        futuri,
+        potenziali,
+      };
+    }).filter(d => d.incassati > 0 || d.futuri > 0 || d.potenziali > 0);
+
+    return chartData;
+  }, [clients, projects, todos]);
+
 
   if (data.length === 0) {
     return (
