@@ -144,7 +144,11 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   };
 
   const handleAddClient = (name: string, email?: string) => {
-    const newClient: Client = { id: crypto.randomUUID(), name, email };
+    const newClient: Client = {
+      id: crypto.randomUUID(),
+      name,
+      ...(email && { email }),
+    };
     setClients(prev => {
       const newClients = [...prev, newClient];
       saveDataToCloud({ clients: newClients });
@@ -153,15 +157,15 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   };
   
   const handleAddProject = (clientId: string, name: string, value: number, notes?: string): Project => {
-    const newProject: Project = { 
-      id: crypto.randomUUID(), 
-      clientId, 
-      name, 
-      value, 
-      workStatus: WorkStatus.PreventivoDaInviare, 
-      paymentStatus: PaymentStatus.DaFatturare, 
+    const newProject: Project = {
+      id: crypto.randomUUID(),
+      clientId,
+      name,
+      value,
+      workStatus: WorkStatus.PreventivoDaInviare,
+      paymentStatus: PaymentStatus.DaFatturare,
       createdAt: new Date().toISOString(),
-      notes
+      ...(notes && { notes }),
     };
     setProjects(prev => {
       const newProjects = [...prev, newProject];
@@ -172,7 +176,14 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   };
 
   const handleAddTodo = (projectId: string, task: string, income: number, dueDate?: string) => {
-    const newTodo: Todo = { id: crypto.randomUUID(), projectId, task, income, completed: false, dueDate };
+    const newTodo: Todo = {
+      id: crypto.randomUUID(),
+      projectId,
+      task,
+      income,
+      completed: false,
+      ...(dueDate && { dueDate }),
+    };
     setTodos(prev => {
       const newTodos = [...prev, newTodo];
       saveDataToCloud({ todos: newTodos });
