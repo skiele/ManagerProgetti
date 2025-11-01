@@ -34,9 +34,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     availableYears 
 }) => (
     <div>
-        <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
-            <div className="flex gap-4 mb-6">
+        <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <div className="flex flex-col sm:flex-row gap-4">
                 <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="p-2 border rounded bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600">
                     <option value="all">Tutti gli anni</option>
                     {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
@@ -63,7 +63,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 <p className="text-3xl font-bold text-orange-500 mt-2">{formatCurrency(potentialIncome)}</p>
             </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 p-2 sm:p-6 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
             <h3 className="text-xl font-bold mb-4">Incassi per Cliente</h3>
             <IncomeChart data={chartData} />
         </div>

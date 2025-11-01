@@ -51,13 +51,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
       <div className="p-4">
-        <div className="flex justify-between items-start gap-4">
-          <div className="flex-1 mr-4">
+        <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+          <div className="flex-1 mr-4 w-full">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">{project.name}</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Creato il: {new Date(project.createdAt).toLocaleDateString('it-IT')}</p>
           </div>
-          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 flex-shrink-0">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-4 flex-shrink-0 w-full md:w-auto">
+            <div className="flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2" title="Priorità">
                 <FlagIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                 <select 
@@ -98,7 +98,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                 </select>
               </div>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center self-end md:self-center">
                 <button onClick={() => onDuplicateProject(project.id)} className="text-gray-400 hover:text-blue-500 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label={`Duplica progetto ${project.name}`}>
                     <CopyIcon className="w-5 h-5" />
                 </button>

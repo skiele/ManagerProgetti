@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority } from './types';
-import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon } from './components/icons';
+import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon, MenuIcon, XIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
 import LoginScreen from './components/LoginScreen';
@@ -29,6 +30,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   const draggedClientIdRef = useRef<string | null>(null);
   const navRef = useRef<HTMLElement>(null);
   const [isNavScrollable, setIsNavScrollable] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
 
   // Helper function to save the current state to Firestore
@@ -63,31 +65,28 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     localStorage.setItem('theme', theme);
   }, [theme]);
   
-  // Questo effetto imposta un observer per gestire i ridimensionamenti della finestra
   useEffect(() => {
     const navElement = navRef.current;
     if (!navElement) return;
 
-    const resizeObserver = new ResizeObserver(() => {
-        setIsNavScrollable(navElement.scrollHeight > navElement.clientHeight);
-    });
+    // Funzione robusta per controllare lo stato di scorrimento
+    const checkScrollable = () => {
+        // Usiamo requestAnimationFrame per assicurarci che il controllo avvenga dopo il rendering del browser
+        requestAnimationFrame(() => {
+            setIsNavScrollable(navElement.scrollHeight > navElement.clientHeight);
+        });
+    };
 
+    // Imposta un observer per gestire i ridimensionamenti del contenitore
+    const resizeObserver = new ResizeObserver(checkScrollable);
     resizeObserver.observe(navElement);
 
-    return () => resizeObserver.disconnect();
-  }, []);
+    // Esegui un controllo iniziale
+    checkScrollable();
 
-  // Questo effetto forza il ricalcolo quando la lista dei clienti cambia
-  useEffect(() => {
-    const navElement = navRef.current;
-    if (navElement) {
-        // Un piccolo timeout per assicurarsi che il DOM sia aggiornato
-        const timer = setTimeout(() => {
-            setIsNavScrollable(navElement.scrollHeight > navElement.clientHeight);
-        }, 100);
-        return () => clearTimeout(timer);
-    }
-  }, [clients]); // Dipendenza chiave: la lista dei clienti
+    // Funzione di pulizia per rimuovere l'observer quando il componente viene smontato
+    return () => resizeObserver.disconnect();
+  }, [clients]); // Questa dipendenza chiave assicura che il controllo venga rieseguito ogni volta che la lista dei clienti cambia
 
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
@@ -549,10 +548,35 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     }
   };
 
+  const handleSelectView = (view: string) => {
+    setSelectedView(view);
+    setIsSidebarOpen(false); // Chiudi la sidebar su selezione
+  };
 
   return (
-    <div className="flex h-screen font-sans bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">
-      <aside className="w-64 bg-gray-800 text-white flex flex-col p-4 shadow-2xl">
+    <div className="relative min-h-screen md:flex font-sans bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+      {/* Mobile Header */}
+      <div className="md:hidden flex justify-between items-center p-4 bg-gray-800 text-white shadow-lg fixed top-0 left-0 right-0 z-20 h-16">
+        <div className="flex items-center">
+            <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
+            <h1 className="text-xl font-bold ml-2">Progetta</h1>
+        </div>
+        <button onClick={() => setIsSidebarOpen(true)} className="p-2">
+            <MenuIcon className="w-6 h-6"/>
+        </button>
+      </div>
+
+      {/* Sidebar Overlay for Mobile */}
+      {isSidebarOpen && (
+          <div 
+              className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30" 
+              onClick={() => setIsSidebarOpen(false)}
+              aria-hidden="true"
+          ></div>
+      )}
+
+      {/* Sidebar */}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-gray-800 text-white flex flex-col p-4 shadow-2xl transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between mb-8">
             <div className="flex items-center">
                 <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
@@ -565,13 +589,16 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                  <button onClick={onLogout} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Esci">
                     <LogOutIcon className="w-5 h-5"/>
                 </button>
+                <button onClick={() => setIsSidebarOpen(false)} className="p-2 rounded-full hover:bg-gray-700 transition-colors md:hidden" aria-label="Chiudi menu">
+                    <XIcon className="w-5 h-5"/>
+                </button>
             </div>
         </div>
         <nav ref={navRef} className={`flex-grow overflow-y-auto no-scrollbar ${isNavScrollable ? 'fade-bottom' : ''}`}>
             <ul>
-                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'dashboard' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => setSelectedView('dashboard')}><ChartBarIcon className="w-5 h-5 mr-3"/> Dashboard</li>
-                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'calendar' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => setSelectedView('calendar')}><CalendarIcon className="w-5 h-5 mr-3"/> Calendario</li>
-                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'settings' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => setSelectedView('settings')}><CogIcon className="w-5 h-5 mr-3"/> Impostazioni</li>
+                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'dashboard' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => handleSelectView('dashboard')}><ChartBarIcon className="w-5 h-5 mr-3"/> Dashboard</li>
+                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'calendar' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => handleSelectView('calendar')}><CalendarIcon className="w-5 h-5 mr-3"/> Calendario</li>
+                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'settings' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => handleSelectView('settings')}><CogIcon className="w-5 h-5 mr-3"/> Impostazioni</li>
             </ul>
             <h2 className="text-sm font-semibold text-gray-400 mt-6 mb-2 px-3 uppercase">Clienti</h2>
             <ul>
@@ -581,7 +608,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                         ${selectedView === client.id ? 'bg-primary' : 'hover:bg-gray-700'} 
                         ${getPriorityClass(client.id)}
                         ${inactiveClients.has(client.id) ? 'opacity-60' : ''}`}>
-                        <div className="flex items-center flex-1 min-w-0" onClick={() => setSelectedView(client.id)}>
+                        <div className="flex items-center flex-1 min-w-0" onClick={() => handleSelectView(client.id)}>
                             <UsersIcon className="w-4 h-4 mr-3 flex-shrink-0"/> 
                             <span className="truncate">{client.name}</span>
                         </div>
@@ -595,7 +622,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         <div className="mt-auto pt-4 text-center text-xs text-gray-400 flex-shrink-0">v1.6.0</div>
       </aside>
 
-      <main className="flex-1 p-8 overflow-y-auto">
+      <main className="w-full md:flex-1 p-4 sm:p-8 overflow-y-auto mt-16 md:mt-0">
         {selectedView === 'dashboard' && <Dashboard 
             collectedIncome={dashboardTotals.collected} 
             futureIncome={dashboardTotals.future}
