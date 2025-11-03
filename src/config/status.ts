@@ -5,7 +5,7 @@ export const workStatusConfig: Record<WorkStatus, { color: string; label: string
   [WorkStatus.PreventivoInviato]: { color: 'bg-yellow-500', label: 'Preventivo Inviato' },
   [WorkStatus.InLavorazione]: { color: 'bg-blue-500', label: 'In Lavorazione' },
   [WorkStatus.Consegnato]: { color: 'bg-purple-500', label: 'Consegnato' },
-  [WorkStatus.Annullato]: { color: 'bg-red-600', label: 'Annullato' },
+  [WorkStatus.Annullato]: { color: 'bg-destructive', label: 'Annullato' },
 };
 
 export const paymentStatusConfig: Record<PaymentStatus, { color: string; label: string }> = {

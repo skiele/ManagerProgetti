@@ -8,65 +8,55 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: {
-          DEFAULT: 'hsl(221 83% 53%)', // Blu acceso
-          hover: 'hsl(221 83% 60%)',
-          foreground: 'hsl(0 0% 100%)',
-        },
-        secondary: {
-          DEFAULT: 'hsl(210 40% 96.1%)',
-          foreground: 'hsl(222.2 47.4% 11.2%)',
-        },
-        background: 'hsl(0 0% 100%)',
-        foreground: 'hsl(222.2 84% 4.9%)',
-        card: {
-          DEFAULT: 'hsl(0 0% 100%)',
-          foreground: 'hsl(222.2 84% 4.9%)',
-        },
-        muted: {
-          DEFAULT: 'hsl(210 40% 96.1%)',
-          foreground: 'hsl(215.4 16.3% 46.9%)',
-        },
-        accent: {
-          DEFAULT: 'hsl(172 63% 45%)', // Verde acqua
-          hover: 'hsl(172 63% 52%)',
-          foreground: 'hsl(0 0% 100%)',
-        },
-        destructive: {
-          DEFAULT: 'hsl(0 84.2% 60.2%)',
-          foreground: 'hsl(0 0% 100%)',
-        },
-        // Dark theme colors
+        // Light Theme
+        primary: 'hsl(225 76% 52%)',
+        'primary-hover': 'hsl(225 76% 58%)',
+        'primary-foreground': 'hsl(0 0% 100%)',
+        
+        secondary: 'hsl(220 13% 91%)',
+        'secondary-foreground': 'hsl(222 8% 25%)',
+        
+        background: 'hsl(220 14% 96%)',
+        foreground: 'hsl(224 10% 10%)',
+        
+        card: 'hsl(0 0% 100%)',
+        'card-foreground': 'hsl(224 10% 10%)',
+        
+        muted: 'hsl(220 13% 91%)',
+        'muted-foreground': 'hsl(220 9% 46%)',
+        
+        accent: 'hsl(173 80% 40%)',
+        'accent-hover': 'hsl(173 80% 46%)',
+        'accent-foreground': 'hsl(0 0% 100%)',
+        
+        destructive: 'hsl(0 72% 51%)',
+        'destructive-foreground': 'hsl(0 0% 100%)',
+
+        // Dark Theme
         dark: {
-          primary: {
-            DEFAULT: 'hsl(217 91% 60%)',
-            hover: 'hsl(217 91% 67%)',
-            foreground: 'hsl(0 0% 100%)',
-          },
-          secondary: {
-            DEFAULT: 'hsl(217.2 32.6% 17.5%)',
-            foreground: 'hsl(210 40% 98%)',
-          },
-          background: 'hsl(222.2 84% 4.9%)',
-          foreground: 'hsl(210 40% 98%)',
-          card: {
-            DEFAULT: 'hsl(222.2 84% 4.9%)',
-            foreground: 'hsl(210 40% 98%)',
-          },
-          muted: {
-            DEFAULT: 'hsl(217.2 32.6% 17.5%)',
-            foreground: 'hsl(215 20.2% 65.1%)',
-          },
-          accent: {
-             DEFAULT: 'hsl(172 63% 45%)',
-             hover: 'hsl(172 63% 52%)',
-             foreground: 'hsl(0 0% 100%)',
-          },
-          destructive: {
-            DEFAULT: 'hsl(0 62.8% 30.6%)',
-            foreground: 'hsl(0 0% 98%)',
-          },
-        },
+          primary: 'hsl(221 83% 63%)',
+          'primary-hover': 'hsl(221 83% 69%)',
+          'primary-foreground': 'hsl(0 0% 100%)',
+
+          secondary: 'hsl(222 47% 11%)',
+          'secondary-foreground': 'hsl(215 14% 89%)',
+          
+          background: 'hsl(222 47% 8%)',
+          foreground: 'hsl(215 14% 89%)',
+          
+          card: 'hsl(222 47% 11%)',
+          'card-foreground': 'hsl(215 14% 89%)',
+          
+          muted: 'hsl(222 47% 16%)',
+          'muted-foreground': 'hsl(218 11% 65%)',
+          
+          accent: 'hsl(173 70% 50%)',
+          'accent-hover': 'hsl(173 70% 56%)',
+          'accent-foreground': 'hsl(224 10% 10%)',
+          
+          destructive: 'hsl(0 63% 51%)',
+          'destructive-foreground': 'hsl(0 0% 100%)',
+        }
       },
       borderRadius: {
         lg: `0.75rem`,
