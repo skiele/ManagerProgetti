@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority } from './types';
+import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment } from './types';
 import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon, MenuIcon, XIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
@@ -46,7 +46,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
   const [selectedView, setSelectedView] = useState<string>('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalContent, setModalContent] = useState<'client' | 'project' | 'todo' | null>(null);
+  const [modalContent, setModalContent] = useState<'client' | 'project' | 'todo' | 'payment' | null>(null);
   const [currentContextId, setCurrentContextId] = useState<string | null>(null);
 
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -116,6 +116,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
       priority: ProjectPriority.Media,
       createdAt: new Date().toISOString(),
       ...(notes && { notes }),
+      payments: [],
     };
     setProjects(prev => {
       const newProjects = [...prev, newProject];
@@ -141,6 +142,70 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     });
   };
   
+  const handleAddPayment = (projectId: string, amount: number, date: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+
+    setProjects(prev => {
+      const newProjects = prev.map(p => {
+        if (p.id === projectId) {
+          const newPayment: Payment = { id: crypto.randomUUID(), amount, date };
+          const updatedPayments = [...(p.payments || []), newPayment];
+          const totalPaid = updatedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+          const projectTodos = todos.filter(t => t.projectId === projectId);
+          const projectTotal = p.value + projectTodos.reduce((sum, todo) => sum + todo.income, 0);
+
+          let newPaymentStatus = p.paymentStatus;
+          if (totalPaid > 0 && totalPaid < projectTotal) {
+            newPaymentStatus = PaymentStatus.ParzialmentePagato;
+          } else if (totalPaid >= projectTotal) {
+            newPaymentStatus = PaymentStatus.Pagato;
+          } else if (totalPaid <= 0 && (p.paymentStatus === PaymentStatus.Pagato || p.paymentStatus === PaymentStatus.ParzialmentePagato)) {
+             newPaymentStatus = PaymentStatus.Fatturato;
+          }
+          
+          return { ...p, payments: updatedPayments, paymentStatus: newPaymentStatus };
+        }
+        return p;
+      });
+      saveDataToCloud({ projects: newProjects });
+      return newProjects;
+    });
+  };
+  
+  const handleDeletePayment = (projectId: string, paymentId: string) => {
+    if (!window.confirm("Sei sicuro di voler eliminare questo pagamento?")) return;
+    
+    setProjects(prev => {
+        const newProjects = prev.map(p => {
+            if (p.id === projectId) {
+                const updatedPayments = (p.payments || []).filter(payment => payment.id !== paymentId);
+                const totalPaid = updatedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+                const projectTodos = todos.filter(t => t.projectId === projectId);
+                const projectTotal = p.value + projectTodos.reduce((sum, todo) => sum + todo.income, 0);
+
+                let newPaymentStatus = p.paymentStatus;
+                if (totalPaid <= 0) {
+                   if (p.paymentStatus !== PaymentStatus.DaFatturare) {
+                     newPaymentStatus = PaymentStatus.Fatturato;
+                   }
+                } else if (totalPaid > 0 && totalPaid < projectTotal) {
+                    newPaymentStatus = PaymentStatus.ParzialmentePagato;
+                } else if (totalPaid >= projectTotal) {
+                    newPaymentStatus = PaymentStatus.Pagato;
+                }
+
+                return { ...p, payments: updatedPayments, paymentStatus: newPaymentStatus };
+            }
+            return p;
+        });
+        saveDataToCloud({ projects: newProjects });
+        return newProjects;
+    });
+  };
+
   const handleDuplicateProject = (projectId: string) => {
     const originalProject = projects.find(p => p.id === projectId);
     if (!originalProject) return;
@@ -153,6 +218,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         paymentStatus: PaymentStatus.DaFatturare,
         createdAt: new Date().toISOString(),
         paidAt: undefined,
+        payments: [],
     };
 
     const originalTodos = todos.filter(t => t.projectId === projectId);
@@ -214,7 +280,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     }
   };
 
-  const openModal = (type: 'client' | 'project' | 'todo', contextId: string | null = null) => {
+  const openModal = (type: 'client' | 'project' | 'todo' | 'payment', contextId: string | null = null) => {
     setModalContent(type);
     setCurrentContextId(contextId);
     setIsModalOpen(true);
@@ -284,6 +350,9 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     const [task, setTask] = useState('');
     const [income, setIncome] = useState(0);
     const [dueDate, setDueDate] = useState('');
+    const [paymentAmount, setPaymentAmount] = useState(0);
+    const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -293,6 +362,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             handleAddProject(currentContextId, name, projectValue);
         } else if (modalContent === 'todo' && task && currentContextId) {
             handleAddTodo(currentContextId, task, income, dueDate || undefined);
+        } else if (modalContent === 'payment' && paymentAmount > 0 && currentContextId) {
+            handleAddPayment(currentContextId, paymentAmount, paymentDate);
         }
         setIsModalOpen(false);
     };
@@ -318,6 +389,11 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                     <input type="text" placeholder="Attività" value={task} onChange={e => setTask(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" required/>
                     <input type="number" placeholder="Incasso (€) - Opzionale" value={income} onChange={e => setIncome(Number(e.target.value))} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" />
                     <input type="date" placeholder="Data di scadenza" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600" />
+                </>;
+            case 'payment':
+                return <>
+                    <input type="number" placeholder="Importo Pagamento (€)" value={paymentAmount} onChange={e => setPaymentAmount(Number(e.target.value))} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" required/>
+                    <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600" required/>
                 </>;
             default: return null;
         }
@@ -383,18 +459,15 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   // --- OTTIMIZZAZIONE PERFORMANCE: CALCOLI CENTRALIZZATI ---
   
   const availableYears = useMemo(() => {
-    const years = new Set(projects.map(p => new Date(p.paidAt || p.createdAt).getFullYear().toString()));
-    return Array.from(years).sort((a: string, b: string) => b.localeCompare(a));
-  }, [projects]);
-  
-  const filteredProjects = useMemo(() => {
-      return projects.filter(p => {
-          const date = new Date(p.paidAt || p.createdAt);
-          const yearMatch = filterYear === 'all' || date.getFullYear().toString() === filterYear;
-          const monthMatch = filterMonth === 'all' || (date.getMonth() + 1).toString() === filterMonth;
-          return yearMatch && monthMatch;
+    const years = new Set<string>();
+    projects.forEach(p => {
+      if (p.createdAt) years.add(new Date(p.createdAt).getFullYear().toString());
+      p.payments?.forEach(payment => {
+        years.add(new Date(payment.date).getFullYear().toString());
       });
-  }, [projects, filterYear, filterMonth]);
+    });
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [projects]);
   
   const allProjectTotals = useMemo(() => {
     const todoTotals = todos.reduce((acc, todo) => {
@@ -409,33 +482,78 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   }, [projects, todos]);
 
   const dashboardTotals = useMemo(() => {
-    return filteredProjects.reduce((acc, p) => {
-        if (p.workStatus === WorkStatus.Annullato) return acc;
-        const total = allProjectTotals.get(p.id) || 0;
-        if (p.paymentStatus === PaymentStatus.Pagato) acc.collected += total;
-        else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) acc.future += total;
-        else acc.potential += total;
-        return acc;
-    }, { collected: 0, future: 0, potential: 0 });
-  }, [filteredProjects, allProjectTotals]);
+    let collected = 0;
+    let future = 0;
+    let potential = 0;
+
+    projects.forEach(p => {
+        // Calcolo Incassati: basato sulla data dei singoli pagamenti e sui filtri
+        p.payments?.forEach(payment => {
+            const paymentDate = new Date(payment.date);
+            const yearMatch = filterYear === 'all' || paymentDate.getFullYear().toString() === filterYear;
+            const monthMatch = filterMonth === 'all' || (paymentDate.getMonth() + 1).toString() === filterMonth;
+
+            if (yearMatch && monthMatch) {
+                collected += payment.amount;
+            }
+        });
+
+        // Calcolo Futuri e Potenziali: non affetti dai filtri di data
+        if (p.workStatus === WorkStatus.Annullato) return;
+
+        const projectTotal = allProjectTotals.get(p.id) || 0;
+        const totalPaid = p.payments?.reduce((sum, payment) => sum + payment.amount, 0) || 0;
+        const remaining = projectTotal - totalPaid;
+
+        if (p.paymentStatus === PaymentStatus.Pagato) {
+            // Già gestito in collected. Potrebbe esserci un remaining negativo se si paga di più.
+        } else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) {
+            if (remaining > 0) future += remaining;
+        } else { // Preventivo da inviare, Preventivo inviato
+            potential += projectTotal;
+        }
+    });
+
+    return { collected, future, potential };
+  }, [projects, allProjectTotals, filterYear, filterMonth]);
+
 
   const chartData = useMemo(() => {
     const dataByClient = new Map<string, { name: string; incassati: number; futuri: number; potenziali: number }>();
     clients.forEach(c => dataByClient.set(c.id, { name: c.name, incassati: 0, futuri: 0, potenziali: 0 }));
 
-    filteredProjects.forEach(p => {
-        if (p.workStatus === WorkStatus.Annullato) return;
+    projects.forEach(p => {
         const clientData = dataByClient.get(p.clientId);
         if (!clientData) return;
+
+        // Calcolo Incassati per cliente (filtrato)
+        p.payments?.forEach(payment => {
+            const paymentDate = new Date(payment.date);
+            const yearMatch = filterYear === 'all' || paymentDate.getFullYear().toString() === filterYear;
+            const monthMatch = filterMonth === 'all' || (paymentDate.getMonth() + 1).toString() === filterMonth;
+            if (yearMatch && monthMatch) {
+                clientData.incassati += payment.amount;
+            }
+        });
+
+        // Calcolo Futuri e Potenziali per cliente (non filtrato)
+        if (p.workStatus === WorkStatus.Annullato) return;
         
         const total = allProjectTotals.get(p.id) || 0;
-        if (p.paymentStatus === PaymentStatus.Pagato) clientData.incassati += total;
-        else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) clientData.futuri += total;
-        else clientData.potenziali += total;
+        const paid = p.payments?.reduce((sum, payment) => sum + payment.amount, 0) || 0;
+        const remaining = total - paid;
+        
+        if (p.paymentStatus === PaymentStatus.Pagato) {
+            // ok
+        } else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) {
+            if (remaining > 0) clientData.futuri += remaining;
+        } else {
+             clientData.potenziali += total;
+        }
     });
 
     return Array.from(dataByClient.values()).filter(d => d.incassati > 0 || d.futuri > 0 || d.potenziali > 0);
-  }, [clients, filteredProjects, allProjectTotals]);
+  }, [clients, projects, allProjectTotals, filterYear, filterMonth]);
   
   const inactiveClients = useMemo(() => {
     const projectsByClient = projects.reduce((acc, p) => {
@@ -556,15 +674,15 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   return (
     <div className="relative min-h-screen md:flex font-sans bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">
       {/* Mobile Header */}
-      <div className="md:hidden flex justify-between items-center p-4 bg-gray-800 text-white shadow-lg fixed top-0 left-0 right-0 z-20 h-16">
+      <header className="md:hidden flex justify-between items-center p-4 bg-gray-800 text-white shadow-lg fixed top-0 left-0 right-0 z-20 h-16">
         <div className="flex items-center">
             <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
             <h1 className="text-xl font-bold ml-2">Progetta</h1>
         </div>
-        <button onClick={() => setIsSidebarOpen(true)} className="p-2">
+        <button onClick={() => setIsSidebarOpen(true)} className="p-2" aria-label="Apri menu">
             <MenuIcon className="w-6 h-6"/>
         </button>
-      </div>
+      </header>
 
       {/* Sidebar Overlay for Mobile */}
       {isSidebarOpen && (
@@ -653,6 +771,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 onUpdateProjectPriority={handleUpdateProjectPriority}
                 onToggleTodo={handleToggleTodo}
                 onAddProject={clientId => openModal('project', clientId)}
+                onAddPayment={projectId => openModal('payment', projectId)}
+                onDeletePayment={handleDeletePayment}
                 onAiAddProject={openAiModal}
                 onAddTodo={projectId => openModal('todo', projectId)}
                 onDeleteProject={handleDeleteProject}
@@ -664,7 +784,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         )}
       </main>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={ modalContent === 'client' ? 'Aggiungi Cliente' : modalContent === 'project' ? 'Aggiungi Progetto' : 'Aggiungi To-Do' }><FormComponent /></Modal>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={ modalContent === 'client' ? 'Aggiungi Cliente' : modalContent === 'project' ? 'Aggiungi Progetto' : modalContent === 'payment' ? 'Aggiungi Pagamento' : 'Aggiungi To-Do' }><FormComponent /></Modal>
       <Modal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} title="Crea Progetto con AI">{aiContextClientId && <AiFormComponent clientId={aiContextClientId} onComplete={() => setIsAiModalOpen(false)} />}</Modal>
     </div>
   );

@@ -11,6 +11,7 @@ export const workStatusConfig: Record<WorkStatus, { color: string; label: string
 export const paymentStatusConfig: Record<PaymentStatus, { color: string; label: string }> = {
   [PaymentStatus.DaFatturare]: { color: 'bg-indigo-500', label: 'Da Fatturare' },
   [PaymentStatus.Fatturato]: { color: 'bg-teal-500', label: 'Fatturato' },
+  [PaymentStatus.ParzialmentePagato]: { color: 'bg-cyan-500', label: 'Pagato Parzialmente' },
   [PaymentStatus.Pagato]: { color: 'bg-green-500', label: 'Pagato' },
 };
 

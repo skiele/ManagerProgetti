@@ -9,6 +9,7 @@ export enum WorkStatus {
 export enum PaymentStatus {
   DaFatturare = 'da fatturare',
   Fatturato = 'fatturato',
+  ParzialmentePagato = 'pagato parzialmente',
   Pagato = 'pagato',
 }
 
@@ -24,6 +25,13 @@ export interface Client {
   email?: string;
 }
 
+export interface Payment {
+  id: string;
+  amount: number;
+  date: string;
+  notes?: string;
+}
+
 export interface Project {
   id: string;
   clientId: string;
@@ -35,6 +43,7 @@ export interface Project {
   createdAt: string;
   notes?: string;
   paidAt?: string;
+  payments?: Payment[];
 }
 
 export interface Todo {

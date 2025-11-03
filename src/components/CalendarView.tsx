@@ -79,7 +79,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ todos, projects, clients })
               const dayTodos = todosByDate[dateStr] || [];
               const isToday = new Date().toDateString() === new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toDateString();
               return (
-                <div key={day} className="border-t border-gray-200 dark:border-gray-700 min-h-[100px] p-1.5">
+                <div key={day} className="border-t border-gray-200 dark:border-gray-700 min-h-[90px] sm:min-h-[100px] p-1.5">
                   <div className={`font-semibold text-sm ${isToday ? 'bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center' : ''}`}>
                     {day}
                   </div>
