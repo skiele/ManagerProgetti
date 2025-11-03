@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment } from './types';
 import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon, MenuIcon, XIcon, EditIcon } from './components/icons';
@@ -69,24 +68,17 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     const navElement = navRef.current;
     if (!navElement) return;
 
-    // Funzione robusta per controllare lo stato di scorrimento
     const checkScrollable = () => {
-        // Usiamo requestAnimationFrame per assicurarci che il controllo avvenga dopo il rendering del browser
         requestAnimationFrame(() => {
             setIsNavScrollable(navElement.scrollHeight > navElement.clientHeight);
         });
     };
 
-    // Imposta un observer per gestire i ridimensionamenti del contenitore
     const resizeObserver = new ResizeObserver(checkScrollable);
     resizeObserver.observe(navElement);
-
-    // Esegui un controllo iniziale
     checkScrollable();
-
-    // Funzione di pulizia per rimuovere l'observer quando il componente viene smontato
     return () => resizeObserver.disconnect();
-  }, [clients]); // Questa dipendenza chiave assicura che il controllo venga rieseguito ogni volta che la lista dei clienti cambia
+  }, [clients]);
 
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
@@ -318,15 +310,15 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     const hoverPriority = clientPriorities.get(hoverClient.id) || ProjectPriority.Bassa;
 
     if (draggedPriority === hoverPriority) {
-        e.currentTarget.classList.add('bg-gray-700');
+        e.currentTarget.classList.add('bg-muted-foreground/10');
     }
   }
   
-  const handleDragLeave = (e: React.DragEvent<HTMLLIElement>) => e.currentTarget.classList.remove('bg-gray-700');
+  const handleDragLeave = (e: React.DragEvent<HTMLLIElement>) => e.currentTarget.classList.remove('bg-muted-foreground/10');
   
   const handleDrop = (e: React.DragEvent<HTMLLIElement>, dropClient: Client) => {
     e.preventDefault();
-    e.currentTarget.classList.remove('bg-gray-700');
+    e.currentTarget.classList.remove('bg-muted-foreground/10');
     const draggedId = e.dataTransfer.getData("clientId");
     if (!draggedId || draggedId === dropClient.id) return;
     
@@ -364,12 +356,10 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
 
     useEffect(() => {
-        // Reset all form fields when modal closes or changes type
         setName(''); setEmail(''); setProjectValue(0); setTask('');
         setIncome(0); setDueDate(''); setPaymentAmount(0);
         setPaymentDate(new Date().toISOString().split('T')[0]);
 
-        // Populate fields if editing
         if (modalContent === 'editProject' && currentContextId) {
             const projectToEdit = projects.find(p => p.id === currentContextId);
             if (projectToEdit) {
@@ -399,31 +389,31 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         switch (modalContent) {
             case 'client':
                 return <>
-                    <input type="text" placeholder="Nome Cliente" value={name} onChange={e => setName(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" required/>
-                    <input type="email" placeholder="Email Cliente (Opzionale)" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600" />
+                    <input type="text" placeholder="Nome Cliente" value={name} onChange={e => setName(e.target.value)} required/>
+                    <input type="email" placeholder="Email Cliente (Opzionale)" value={email} onChange={e => setEmail(e.target.value)} />
                 </>;
             case 'project':
             case 'editProject':
                 return <>
                     {modalContent === 'project' && (
-                        <select className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" value={currentContextId || ''} onChange={(e) => setCurrentContextId(e.target.value)} required>
+                        <select value={currentContextId || ''} onChange={(e) => setCurrentContextId(e.target.value)} required>
                             <option value="" disabled>Seleziona Cliente</option>
                             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                     )}
-                    <input type="text" placeholder="Nome Progetto" value={name} onChange={e => setName(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" required/>
-                    <input type="number" placeholder="Valore Progetto (€)" value={projectValue} onChange={e => setProjectValue(Number(e.target.value))} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600" required/>
+                    <input type="text" placeholder="Nome Progetto" value={name} onChange={e => setName(e.target.value)} required/>
+                    <input type="number" placeholder="Valore Progetto (€)" value={projectValue} onChange={e => setProjectValue(Number(e.target.value))} required/>
                 </>;
             case 'todo':
                  return <>
-                    <input type="text" placeholder="Attività" value={task} onChange={e => setTask(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" required/>
-                    <input type="number" placeholder="Incasso (€) - Opzionale" value={income} onChange={e => setIncome(Number(e.target.value))} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" />
-                    <input type="date" placeholder="Data di scadenza" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600" />
+                    <input type="text" placeholder="Attività" value={task} onChange={e => setTask(e.target.value)} required/>
+                    <input type="number" placeholder="Incasso (€) - Opzionale" value={income} onChange={e => setIncome(Number(e.target.value))} />
+                    <input type="date" placeholder="Data di scadenza" value={dueDate} onChange={e => setDueDate(e.target.value)} />
                 </>;
             case 'payment':
                 return <>
-                    <input type="number" placeholder="Importo Pagamento (€)" value={paymentAmount} onChange={e => setPaymentAmount(Number(e.target.value))} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" required/>
-                    <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600" required/>
+                    <input type="number" placeholder="Importo Pagamento (€)" value={paymentAmount} onChange={e => setPaymentAmount(Number(e.target.value))} required/>
+                    <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required/>
                 </>;
             default: return null;
         }
@@ -433,11 +423,13 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
     return <form onSubmit={handleSubmit} className="space-y-4">
         {renderFormFields()}
-        <button type="submit" className="w-full bg-primary text-white py-2 rounded-lg font-semibold hover:bg-secondary transition-colors">{buttonText}</button>
+        <div className="flex justify-end pt-4">
+          <button type="submit" className="btn btn-primary px-4 py-2">{buttonText}</button>
+        </div>
     </form>
   };
 
-  const AiFormComponent = ({ clientId, onComplete }: { clientId: string; onComplete: () => void }) => { /* ... AI Form implementation remains the same ... */ 
+  const AiFormComponent = ({ clientId, onComplete }: { clientId: string; onComplete: () => void }) => {
       const [description, setDescription] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -479,7 +471,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
     return (
       <form onSubmit={handleSubmit} className="space-y-4">
-        <textarea placeholder="Descrivi brevemente il progetto (es. 'Sito e-commerce per un negozio di abbigliamento')" value={description} onChange={e => setDescription(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" rows={4} required disabled={loading}/>
+        <textarea placeholder="Descrivi brevemente il progetto (es. 'Sito e-commerce per un negozio di abbigliamento')" value={description} onChange={e => setDescription(e.target.value)} rows={4} required disabled={loading}/>
         {error && <p className="text-sm text-red-500 text-center">{error}</p>}
         <button type="submit" className="w-full bg-accent text-white py-2 rounded-lg font-semibold hover:bg-opacity-80 transition-opacity flex items-center justify-center disabled:bg-gray-400" disabled={loading}>
             {loading ? 'Generazione...' : <><SparklesIcon className="w-5 h-5 mr-2"/> Genera Progetto</>}
@@ -519,7 +511,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     let potential = 0;
 
     projects.forEach(p => {
-        // Calcolo Incassati: basato sulla data dei singoli pagamenti e sui filtri
         p.payments?.forEach(payment => {
             const paymentDate = new Date(payment.date);
             const yearMatch = filterYear === 'all' || paymentDate.getFullYear().toString() === filterYear;
@@ -530,7 +521,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             }
         });
 
-        // Calcolo Futuri e Potenziali: non affetti dai filtri di data
         if (p.workStatus === WorkStatus.Annullato) return;
 
         const projectTotal = allProjectTotals.get(p.id) || 0;
@@ -538,10 +528,10 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         const remaining = projectTotal - totalPaid;
 
         if (p.paymentStatus === PaymentStatus.Pagato) {
-            // Già gestito in collected. Potrebbe esserci un remaining negativo se si paga di più.
+            // ok
         } else if (p.workStatus === WorkStatus.InLavorazione || p.workStatus === WorkStatus.Consegnato) {
             if (remaining > 0) future += remaining;
-        } else { // Preventivo da inviare, Preventivo inviato
+        } else {
             potential += projectTotal;
         }
     });
@@ -558,7 +548,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         const clientData = dataByClient.get(p.clientId);
         if (!clientData) return;
 
-        // Calcolo Incassati per cliente (filtrato)
         p.payments?.forEach(payment => {
             const paymentDate = new Date(payment.date);
             const yearMatch = filterYear === 'all' || paymentDate.getFullYear().toString() === filterYear;
@@ -568,7 +557,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             }
         });
 
-        // Calcolo Futuri e Potenziali per cliente (non filtrato)
         if (p.workStatus === WorkStatus.Annullato) return;
         
         const total = allProjectTotals.get(p.id) || 0;
@@ -608,8 +596,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     const priorities = new Map<string, ProjectPriority>();
 
     projects.forEach(project => {
-      // Un progetto è considerato "attivo" (e contribuisce alla priorità) se non è annullato
-      // e non è contemporaneamente consegnato E pagato.
       const isFinished = project.workStatus === WorkStatus.Consegnato && project.paymentStatus === PaymentStatus.Pagato;
       const isActive = project.workStatus !== WorkStatus.Annullato && !isFinished;
       
@@ -634,7 +620,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             high.push(client);
         } else if (priority === ProjectPriority.Media) {
             medium.push(client);
-        } else { // Include Bassa e priorità non definite (clienti inattivi)
+        } else {
             low.push(client);
         }
     });
@@ -700,13 +686,13 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
   const handleSelectView = (view: string) => {
     setSelectedView(view);
-    setIsSidebarOpen(false); // Chiudi la sidebar su selezione
+    setIsSidebarOpen(false);
   };
 
   const modalTitle = () => {
     switch(modalContent) {
-      case 'client': return 'Aggiungi Cliente';
-      case 'project': return 'Aggiungi Progetto';
+      case 'client': return 'Nuovo Cliente';
+      case 'project': return 'Nuovo Progetto';
       case 'editProject': return 'Modifica Progetto';
       case 'payment': return 'Aggiungi Pagamento';
       case 'todo': return 'Aggiungi To-Do';
@@ -714,10 +700,17 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     }
   };
 
+  const fabAction = () => {
+      if(selectedClient){
+          openModal('project', selectedClient.id)
+      } else {
+          openModal('client')
+      }
+  }
+
   return (
-    <div className="relative min-h-screen md:flex font-sans bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">
-      {/* Mobile Header */}
-      <header className="md:hidden flex justify-between items-center p-4 bg-gray-800 text-white shadow-lg fixed top-0 left-0 right-0 z-20 h-16">
+    <div className="relative min-h-screen md:flex font-sans bg-background text-foreground dark:bg-dark-background dark:text-dark-foreground">
+      <header className="md:hidden flex justify-between items-center p-4 bg-card dark:bg-dark-card text-foreground dark:text-dark-foreground shadow-lg fixed top-0 left-0 right-0 z-20 h-16 border-b border-muted dark:border-dark-muted">
         <div className="flex items-center">
             <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
             <h1 className="text-xl font-bold ml-2">Progetta</h1>
@@ -727,7 +720,6 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         </button>
       </header>
 
-      {/* Sidebar Overlay for Mobile */}
       {isSidebarOpen && (
           <div 
               className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30" 
@@ -736,37 +728,36 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
           ></div>
       )}
 
-      {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-gray-800 text-white flex flex-col p-4 shadow-2xl transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-secondary dark:bg-dark-secondary text-secondary-foreground dark:text-dark-secondary-foreground flex flex-col p-4 shadow-2xl transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between mb-8">
             <div className="flex items-center">
                 <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
                 <h1 className="text-2xl font-bold ml-2">Progetta</h1>
             </div>
             <div className="flex items-center gap-2">
-                <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Cambia tema">
+                <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-muted dark:hover:bg-dark-muted transition-colors" aria-label="Cambia tema">
                     {theme === 'light' ? <MoonIcon className="w-5 h-5"/> : <SunIcon className="w-5 h-5"/>}
                 </button>
-                 <button onClick={onLogout} className="p-2 rounded-full hover:bg-gray-700 transition-colors" aria-label="Esci">
+                 <button onClick={onLogout} className="p-2 rounded-full hover:bg-muted dark:hover:bg-dark-muted transition-colors" aria-label="Esci">
                     <LogOutIcon className="w-5 h-5"/>
                 </button>
-                <button onClick={() => setIsSidebarOpen(false)} className="p-2 rounded-full hover:bg-gray-700 transition-colors md:hidden" aria-label="Chiudi menu">
+                <button onClick={() => setIsSidebarOpen(false)} className="p-2 rounded-full hover:bg-muted dark:hover:bg-dark-muted md:hidden" aria-label="Chiudi menu">
                     <XIcon className="w-5 h-5"/>
                 </button>
             </div>
         </div>
         <nav ref={navRef} className={`flex-grow overflow-y-auto no-scrollbar ${isNavScrollable ? 'fade-bottom' : ''}`}>
             <ul>
-                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'dashboard' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => handleSelectView('dashboard')}><ChartBarIcon className="w-5 h-5 mr-3"/> Dashboard</li>
-                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'calendar' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => handleSelectView('calendar')}><CalendarIcon className="w-5 h-5 mr-3"/> Calendario</li>
-                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors ${selectedView === 'settings' ? 'bg-primary' : 'hover:bg-gray-700'}`} onClick={() => handleSelectView('settings')}><CogIcon className="w-5 h-5 mr-3"/> Impostazioni</li>
+                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'dashboard' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('dashboard')}><ChartBarIcon className="w-5 h-5 mr-3"/> Dashboard</li>
+                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'calendar' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('calendar')}><CalendarIcon className="w-5 h-5 mr-3"/> Calendario</li>
+                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'settings' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('settings')}><CogIcon className="w-5 h-5 mr-3"/> Impostazioni</li>
             </ul>
-            <h2 className="text-sm font-semibold text-gray-400 mt-6 mb-2 px-3 uppercase">Clienti</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground dark:text-dark-muted-foreground mt-6 mb-2 px-3 uppercase">Clienti</h2>
             <ul>
                 {sortedClients.map((client) => (
                     <li key={client.id} draggable="true" onDragStart={e => handleDragStart(e, client)} onDragOver={handleDragOver} onDragEnter={e => handleDragEnter(e, client)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, client)} onDragEnd={handleDragEnd} 
                         className={`group flex items-center justify-between p-3 rounded-lg cursor-grab mb-1 transition-all text-sm border-l-4
-                        ${selectedView === client.id ? 'bg-primary' : 'hover:bg-gray-700'} 
+                        ${selectedView === client.id ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'} 
                         ${getPriorityClass(client.id)}
                         ${inactiveClients.has(client.id) ? 'opacity-60' : ''}`}>
                         <div className="flex items-center flex-1 min-w-0" onClick={() => handleSelectView(client.id)}>
@@ -777,10 +768,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 ))}
             </ul>
         </nav>
-        <div className="space-y-2 mt-4 flex-shrink-0">
-            <button onClick={() => openModal('client')} className="w-full bg-accent text-white py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-opacity-80 transition-opacity"><PlusIcon className="w-5 h-5 mr-2"/> Nuovo Cliente</button>
-        </div>
-        <div className="mt-auto pt-4 text-center text-xs text-gray-400 flex-shrink-0">v1.6.0</div>
+        <div className="mt-auto pt-4 text-center text-xs text-muted-foreground flex-shrink-0">v1.7.0</div>
       </aside>
 
       <main className="w-full md:flex-1 p-4 sm:p-8 overflow-y-auto mt-16 md:mt-0">
@@ -813,11 +801,10 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 onUpdateProjectPaymentStatus={handleUpdateProjectPaymentStatus}
                 onUpdateProjectPriority={handleUpdateProjectPriority}
                 onToggleTodo={handleToggleTodo}
-                onAddProject={clientId => openModal('project', clientId)}
+                onAddTodo={projectId => openModal('todo', projectId)}
                 onAddPayment={projectId => openModal('payment', projectId)}
                 onDeletePayment={handleDeletePayment}
                 onAiAddProject={openAiModal}
-                onAddTodo={projectId => openModal('todo', projectId)}
                 onDeleteProject={handleDeleteProject}
                 onEditProject={projectId => openModal('editProject', projectId)}
                 onDeleteTodo={handleDeleteTodo}
@@ -826,6 +813,14 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             />
         )}
       </main>
+      
+      <button 
+        onClick={fabAction}
+        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-primary text-primary-foreground dark:bg-dark-primary dark:text-dark-primary-foreground shadow-lg hover:bg-primary-hover dark:hover:bg-dark-primary-hover flex items-center justify-center transform hover:scale-105 transition-transform"
+        aria-label={selectedClient ? "Aggiungi Progetto" : "Aggiungi Cliente"}
+      >
+        <PlusIcon className="w-7 h-7" />
+      </button>
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalTitle()}><FormComponent /></Modal>
       <Modal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} title="Crea Progetto con AI">{aiContextClientId && <AiFormComponent clientId={aiContextClientId} onComplete={() => setIsAiModalOpen(false)} />}</Modal>
@@ -862,14 +857,14 @@ export default function App() {
   
   switch (authState.state) {
     case 'loading':
-      return <div className="flex items-center justify-center h-screen bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">Caricamento in corso...</div>;
+      return <div className="flex items-center justify-center h-screen bg-background text-foreground">Caricamento in corso...</div>;
     case 'unauthenticated':
       return authView === 'login' 
         ? <LoginScreen onNavigateToRegister={() => setAuthView('setup')} />
         : <SetupScreen onNavigateToLogin={() => setAuthView('login')} />;
     case 'authenticated':
       if (!authState.data || !authState.user) {
-        return <div className="flex items-center justify-center h-screen bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">Caricamento dati utente...</div>;
+        return <div className="flex items-center justify-center h-screen bg-background text-foreground">Caricamento dati utente...</div>;
       }
       return <MainApp onLogout={handleLogout} initialData={authState.data} userId={authState.user.uid} />;
     default:

@@ -15,3 +15,40 @@
     -webkit-mask-image: linear-gradient(to bottom, black 90%, transparent 100%);
     mask-image: linear-gradient(to bottom, black 90%, transparent 100%);
 }
+
+@layer base {
+  body {
+    @apply bg-background text-foreground;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  }
+
+  /* Material inspired inputs */
+  input[type="text"],
+  input[type="email"],
+  input[type="number"],
+  input[type="date"],
+  select,
+  textarea {
+      @apply w-full px-3 py-2 rounded-md border bg-transparent;
+      @apply border-muted-foreground/30 focus:border-primary focus:ring-1 focus:ring-primary;
+      @apply dark:border-dark-muted-foreground/30 dark:focus:border-dark-primary;
+      transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  }
+  
+  /* Stile per i bottoni per coerenza */
+  .btn {
+      @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  
+  .btn-primary {
+      @apply bg-primary text-primary-foreground hover:bg-primary-hover;
+      @apply dark:bg-dark-primary dark:text-dark-primary-foreground dark:hover:bg-dark-primary-hover;
+  }
+
+  /* Add smooth transitions */
+  *, ::before, ::after {
+      transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+      transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      transition-duration: 150ms;
+  }
+}
