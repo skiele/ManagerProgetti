@@ -87,7 +87,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ todos, projects, clients })
                     {dayTodos.map(todo => {
                       const { projectName, clientName } = getProjectAndClientInfo(todo.projectId);
                       return (
-                        <div key={todo.id} className={`p-1.5 rounded-md text-xs ${todo.completed ? 'bg-green-100 dark:bg-green-900/50' : 'bg-blue-100 dark:bg-blue-900/50'}`}>
+                        <div key={todo.id} className={`p-1.5 rounded-md text-xs ${todo.completed ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200'}`}>
                           <p className={`font-bold ${todo.completed ? 'line-through' : ''}`}>{todo.task}</p>
                           <p className="text-gray-600 dark:text-gray-400 truncate">{clientName} / {projectName}</p>
                         </div>
