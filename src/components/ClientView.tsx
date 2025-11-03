@@ -18,7 +18,7 @@ interface ClientViewProps {
     onAddPayment: (projectId: string) => void;
     onDeletePayment: (projectId: string, paymentId: string) => void;
     onDeleteProject: (id: string) => void;
-    onDuplicateProject: (id: string) => void;
+    onEditProject: (id: string) => void;
     onDeleteTodo: (id: string) => void;
     onUpdateProjectNotes: (id: string, notes: string) => void;
     onDeleteClient: (clientId: string) => void;
@@ -38,7 +38,7 @@ const ClientView: React.FC<ClientViewProps> = ({
     onAddPayment,
     onDeletePayment,
     onDeleteProject, 
-    onDuplicateProject, 
+    onEditProject, 
     onDeleteTodo, 
     onUpdateProjectNotes,
     onDeleteClient
@@ -72,7 +72,7 @@ const ClientView: React.FC<ClientViewProps> = ({
                     onAddPayment={onAddPayment}
                     onDeletePayment={onDeletePayment}
                     onDeleteProject={onDeleteProject}
-                    onDuplicateProject={onDuplicateProject}
+                    onEditProject={onEditProject}
                     onDeleteTodo={onDeleteTodo}
                     onUpdateProjectNotes={onUpdateProjectNotes}
                 />

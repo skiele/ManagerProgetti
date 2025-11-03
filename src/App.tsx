@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment } from './types';
-import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon, MenuIcon, XIcon } from './components/icons';
+import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon, MenuIcon, XIcon, EditIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
 import LoginScreen from './components/LoginScreen';
@@ -46,7 +46,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
   const [selectedView, setSelectedView] = useState<string>('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalContent, setModalContent] = useState<'client' | 'project' | 'todo' | 'payment' | null>(null);
+  const [modalContent, setModalContent] = useState<'client' | 'project' | 'todo' | 'payment' | 'editProject' | null>(null);
   const [currentContextId, setCurrentContextId] = useState<string | null>(null);
 
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -124,6 +124,16 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
       return newProjects;
     });
     return newProject;
+  };
+
+  const handleUpdateProject = (projectId: string, data: { name: string; value: number }) => {
+    setProjects(prev => {
+      const newProjects = prev.map(p =>
+        p.id === projectId ? { ...p, name: data.name, value: data.value } : p
+      );
+      saveDataToCloud({ projects: newProjects });
+      return newProjects;
+    });
   };
 
   const handleAddTodo = (projectId: string, task: string, income: number, dueDate?: string) => {
@@ -280,7 +290,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     }
   };
 
-  const openModal = (type: 'client' | 'project' | 'todo' | 'payment', contextId: string | null = null) => {
+  const openModal = (type: 'client' | 'project' | 'todo' | 'payment' | 'editProject', contextId: string | null = null) => {
     setModalContent(type);
     setCurrentContextId(contextId);
     setIsModalOpen(true);
@@ -343,7 +353,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     e.currentTarget.classList.remove('opacity-50', 'bg-primary');
   }
   
-  const FormComponent = () => { /* ... Form implementation remains the same ... */ 
+  const FormComponent = () => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [projectValue, setProjectValue] = useState(0);
@@ -353,6 +363,21 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     const [paymentAmount, setPaymentAmount] = useState(0);
     const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
 
+    useEffect(() => {
+        // Reset all form fields when modal closes or changes type
+        setName(''); setEmail(''); setProjectValue(0); setTask('');
+        setIncome(0); setDueDate(''); setPaymentAmount(0);
+        setPaymentDate(new Date().toISOString().split('T')[0]);
+
+        // Populate fields if editing
+        if (modalContent === 'editProject' && currentContextId) {
+            const projectToEdit = projects.find(p => p.id === currentContextId);
+            if (projectToEdit) {
+                setName(projectToEdit.name);
+                setProjectValue(projectToEdit.value);
+            }
+        }
+    }, [modalContent, currentContextId, projects]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -360,6 +385,8 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             handleAddClient(name, email || undefined);
         } else if (modalContent === 'project' && name && currentContextId) {
             handleAddProject(currentContextId, name, projectValue);
+        } else if (modalContent === 'editProject' && name && currentContextId) {
+            handleUpdateProject(currentContextId, { name, value: projectValue });
         } else if (modalContent === 'todo' && task && currentContextId) {
             handleAddTodo(currentContextId, task, income, dueDate || undefined);
         } else if (modalContent === 'payment' && paymentAmount > 0 && currentContextId) {
@@ -376,11 +403,14 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                     <input type="email" placeholder="Email Cliente (Opzionale)" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600" />
                 </>;
             case 'project':
+            case 'editProject':
                 return <>
-                    <select className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" value={currentContextId || ''} onChange={(e) => setCurrentContextId(e.target.value)} required>
-                        <option value="" disabled>Seleziona Cliente</option>
-                        {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                    {modalContent === 'project' && (
+                        <select className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" value={currentContextId || ''} onChange={(e) => setCurrentContextId(e.target.value)} required>
+                            <option value="" disabled>Seleziona Cliente</option>
+                            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    )}
                     <input type="text" placeholder="Nome Progetto" value={name} onChange={e => setName(e.target.value)} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 mb-4" required/>
                     <input type="number" placeholder="Valore Progetto (€)" value={projectValue} onChange={e => setProjectValue(Number(e.target.value))} className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600" required/>
                 </>;
@@ -398,10 +428,12 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             default: return null;
         }
     };
+    
+    const buttonText = modalContent === 'editProject' ? 'Salva Modifiche' : 'Aggiungi';
 
     return <form onSubmit={handleSubmit} className="space-y-4">
         {renderFormFields()}
-        <button type="submit" className="w-full bg-primary text-white py-2 rounded-lg font-semibold hover:bg-secondary transition-colors">Aggiungi</button>
+        <button type="submit" className="w-full bg-primary text-white py-2 rounded-lg font-semibold hover:bg-secondary transition-colors">{buttonText}</button>
     </form>
   };
 
@@ -671,6 +703,17 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     setIsSidebarOpen(false); // Chiudi la sidebar su selezione
   };
 
+  const modalTitle = () => {
+    switch(modalContent) {
+      case 'client': return 'Aggiungi Cliente';
+      case 'project': return 'Aggiungi Progetto';
+      case 'editProject': return 'Modifica Progetto';
+      case 'payment': return 'Aggiungi Pagamento';
+      case 'todo': return 'Aggiungi To-Do';
+      default: return '';
+    }
+  };
+
   return (
     <div className="relative min-h-screen md:flex font-sans bg-light dark:bg-gray-900 text-gray-800 dark:text-gray-200">
       {/* Mobile Header */}
@@ -776,7 +819,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
                 onAiAddProject={openAiModal}
                 onAddTodo={projectId => openModal('todo', projectId)}
                 onDeleteProject={handleDeleteProject}
-                onDuplicateProject={handleDuplicateProject}
+                onEditProject={projectId => openModal('editProject', projectId)}
                 onDeleteTodo={handleDeleteTodo}
                 onUpdateProjectNotes={handleUpdateProjectNotes}
                 onDeleteClient={handleDeleteClient}
@@ -784,7 +827,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         )}
       </main>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={ modalContent === 'client' ? 'Aggiungi Cliente' : modalContent === 'project' ? 'Aggiungi Progetto' : modalContent === 'payment' ? 'Aggiungi Pagamento' : 'Aggiungi To-Do' }><FormComponent /></Modal>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalTitle()}><FormComponent /></Modal>
       <Modal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} title="Crea Progetto con AI">{aiContextClientId && <AiFormComponent clientId={aiContextClientId} onComplete={() => setIsAiModalOpen(false)} />}</Modal>
     </div>
   );
