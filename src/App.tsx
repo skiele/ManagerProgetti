@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment } from './types';
 import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon, MenuIcon, XIcon, EditIcon, ListTodoIcon } from './components/icons';
@@ -137,6 +138,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
       income,
       completed: false,
       ...(dueDate && { dueDate }),
+      order: todos.length // Assign default order at the end
     };
     setTodos(prev => {
       const newTodos = [...prev, newTodo];
@@ -144,6 +146,19 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
       return newTodos;
     });
   };
+
+  const handleReorderTodos = (updatedTodos: Todo[]) => {
+      setTodos(prev => {
+          // Create a map of updated todos for O(1) lookup
+          const updatedMap = new Map(updatedTodos.map(t => [t.id, t]));
+          
+          // Merge updated todos with existing ones
+          const newTodos = prev.map(t => updatedMap.get(t.id) || t);
+          
+          saveDataToCloud({ todos: newTodos });
+          return newTodos;
+      });
+  }
   
   const handleAddPayment = (projectId: string, amount: number, date: string) => {
     const project = projects.find(p => p.id === projectId);
@@ -230,6 +245,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         id: crypto.randomUUID(),
         projectId: newProject.id,
         completed: false,
+        order: todo.order 
     }));
 
     setProjects(prev => {
@@ -785,7 +801,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
             setFilterMonth={setFilterMonth}
             availableYears={availableYears}
         />}
-        {selectedView === 'tasks' && <TaskView todos={todos} projects={projects} clients={clients} onToggleTodo={handleToggleTodo} onDeleteTodo={handleDeleteTodo} />}
+        {selectedView === 'tasks' && <TaskView todos={todos} projects={projects} clients={clients} onToggleTodo={handleToggleTodo} onDeleteTodo={handleDeleteTodo} onReorderTodos={handleReorderTodos}/>}
         {selectedView === 'calendar' && <CalendarView todos={todos} projects={projects} clients={clients}/>}
         {selectedView === 'settings' && <SettingsView 
             userId={userId} 

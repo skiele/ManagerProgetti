@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { Todo } from '../types';
-import { TrashIcon } from './icons';
+import { TrashIcon, GripVerticalIcon } from './icons';
 import { formatCurrency } from '../utils/formatting';
 
 interface TodoItemProps {
@@ -8,12 +9,36 @@ interface TodoItemProps {
   onToggle: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
   context?: string;
+  isDraggable?: boolean;
+  onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDrop?: (e: React.DragEvent<HTMLDivElement>) => void;
 }
 
-const TodoItem: React.FC<TodoItemProps> = ({ todo, onToggle, onDelete, context }) => {
+const TodoItem: React.FC<TodoItemProps> = ({ 
+  todo, 
+  onToggle, 
+  onDelete, 
+  context,
+  isDraggable,
+  onDragStart,
+  onDragOver,
+  onDrop
+}) => {
   return (
-    <div className="group flex items-center justify-between p-3 bg-muted/50 dark:bg-dark-muted/50 rounded-md hover:bg-muted dark:hover:bg-dark-muted">
+    <div 
+        className={`group flex items-center justify-between p-3 bg-muted/50 dark:bg-dark-muted/50 rounded-md hover:bg-muted dark:hover:bg-dark-muted ${isDraggable ? 'cursor-move' : ''}`}
+        draggable={isDraggable}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+    >
       <div className="flex items-center min-w-0">
+        {isDraggable && (
+            <div className="mr-2 text-muted-foreground/50 cursor-grab active:cursor-grabbing">
+                <GripVerticalIcon className="w-4 h-4" />
+            </div>
+        )}
         <input
           type="checkbox"
           checked={todo.completed}
