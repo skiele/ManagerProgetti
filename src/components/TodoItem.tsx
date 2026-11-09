@@ -53,7 +53,7 @@ const TodoItem: React.FC<TodoItemProps> = ({
       <div className="flex items-center flex-shrink-0 ml-4">
          {todo.dueDate && <span className={`text-xs mr-4 ${new Date(todo.dueDate) < new Date(new Date().setHours(0,0,0,0)) && !todo.completed ? 'text-red-500 font-bold' : 'text-muted-foreground'}`}>{new Date(todo.dueDate).toLocaleDateString('it-IT')}</span>}
         <span className="font-semibold text-foreground mr-4">{formatCurrency(todo.income)}</span>
-        <button onClick={() => onDelete(todo.id)} className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100" aria-label={`Elimina task ${todo.task}`}>
+        <button onClick={() => onDelete(todo.id)} className="text-muted-foreground hover:text-destructive md:opacity-0 md:group-hover:opacity-100" aria-label={`Elimina task ${todo.task}`}>
             <TrashIcon className="w-4 h-4" />
         </button>
       </div>

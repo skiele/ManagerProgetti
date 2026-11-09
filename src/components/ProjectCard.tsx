@@ -4,6 +4,7 @@ import { PlusIcon, TrashIcon, FlagIcon, BriefcaseIcon, DollarSignIcon, EditIcon 
 import { workStatusConfig, paymentStatusConfig, projectPriorityConfig } from '../config/status';
 import { formatCurrency } from '../utils/formatting';
 import TodoItem from './TodoItem';
+import StatusChip from './StatusChip';
 
 interface ProjectCardProps {
   project: Project;
@@ -19,29 +20,8 @@ interface ProjectCardProps {
   onEditProject: (id: string) => void;
   onDeleteTodo: (id: string) => void;
   onUpdateProjectNotes: (id: string, notes: string) => void;
+  onOpenProject: (id: string) => void;
 }
-
-const StatusChip: React.FC<{
-  value: string;
-  onChange: (value: any) => void;
-  config: Record<string, { color: string; label: string }>;
-  options: string[];
-  icon: React.ReactNode;
-}> = ({ value, onChange, config, options, icon }) => (
-  <div className={`relative group inline-flex items-center gap-2 text-xs font-medium text-white px-2.5 py-1.5 rounded-full cursor-pointer transition-all ${config[value].color}`}>
-    {icon}
-    <span>{config[value].label}</span>
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-      aria-label={`Cambia stato ${config[value].label}`}
-    >
-      {options.map(opt => <option key={opt} value={opt}>{config[opt].label}</option>)}
-    </select>
-  </div>
-);
-
 
 const ProjectCard: React.FC<ProjectCardProps> = ({ 
   project, 
@@ -56,7 +36,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   onDeleteProject,
   onEditProject,
   onDeleteTodo,
-  onUpdateProjectNotes
+  onUpdateProjectNotes,
+  onOpenProject
 }) => {
   const projectTotal = useMemo(() => project.value + todos.reduce((sum, todo) => sum + todo.income, 0), [project.value, todos]);
   const paidAmount = useMemo(() => project.payments?.reduce((sum, p) => sum + p.amount, 0) || 0, [project.payments]);
@@ -82,7 +63,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       <div className="p-4 border-b border-muted/50 dark:border-dark-muted/50">
         <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
           <div className="flex-1 mr-4 w-full">
-            <h3 className="text-xl font-bold text-card-foreground dark:text-dark-card-foreground">{project.name}</h3>
+            <h3 className="text-xl font-bold text-card-foreground dark:text-dark-card-foreground">
+              <button onClick={() => onOpenProject(project.id)} className="text-left hover:text-primary dark:hover:text-dark-primary hover:underline">{project.name}</button>
+            </h3>
             <p className="text-sm text-muted-foreground dark:text-dark-muted-foreground mt-1">
               Creato il: {new Date(project.createdAt).toLocaleDateString('it-IT')}
             </p>
@@ -172,7 +155,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                                   <span className="font-semibold">{formatCurrency(payment.amount)}</span>
                                   <span className="text-muted-foreground ml-2">il {new Date(payment.date).toLocaleDateString('it-IT')}</span>
                               </div>
-                              <button onClick={() => onDeletePayment(project.id, payment.id)} className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100" aria-label="Elimina pagamento">
+                              <button onClick={() => onDeletePayment(project.id, payment.id)} className="text-muted-foreground hover:text-destructive md:opacity-0 md:group-hover:opacity-100" aria-label="Elimina pagamento">
                                   <TrashIcon className="w-4 h-4" />
                               </button>
                           </div>

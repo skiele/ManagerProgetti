@@ -28,6 +28,8 @@ users/{uid}                 metadati (schemaVersion: 2) + vecchi array conservat
 users/{uid}/clients/{id}
 users/{uid}/projects/{id}   (i pagamenti restano dentro il progetto)
 users/{uid}/todos/{id}
+users/{uid}/quotes/{id}     preventivi (legati a un progetto)
+users/{uid}/settings/profile  i tuoi dati per l'intestazione dei preventivi
 ```
 
 Al primo accesso con la nuova versione i dati vengono copiati automaticamente dal vecchio formato.
@@ -36,8 +38,11 @@ La copia non cancella nulla e può essere ripetuta senza duplicati.
 ### Pubblicare un aggiornamento che tocca i dati
 
 1. Dall'app attuale: **Impostazioni → Esporta Backup**.
-2. Pubblica le regole di `firestore.rules` (console Firebase → Firestore Database → Regole, oppure `firebase deploy --only firestore:rules`).
-3. Pubblica subito dopo la nuova versione dell'app.
+2. Pubblica regole e app insieme (Firebase Hosting; `firebase.json` esegue la build da solo):
+   ```
+   npx firebase-tools login
+   npx firebase-tools deploy --only firestore:rules,hosting
+   ```
 4. Ricarica l'app su tutti i dispositivi: le regole bloccano le scritture della versione vecchia.
 
 ### Sviluppo locale con gli emulatori
@@ -45,4 +50,6 @@ La copia non cancella nulla e può essere ripetuta senza duplicati.
 ```
 npx firebase-tools emulators:start --only auth,firestore --project progetta-800ca
 VITE_USE_EMULATOR=true npm run dev
+node tests/migration.e2e.cjs
+node tests/projects-quotes.e2e.cjs
 ```

@@ -58,8 +58,49 @@ export interface Todo {
   order?: number;
 }
 
+export enum QuoteStatus {
+  Bozza = 'bozza',
+  Inviato = 'inviato',
+  Accettato = 'accettato',
+  Rifiutato = 'rifiutato',
+}
+
+export interface QuoteItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface Quote {
+  id: string;
+  projectId: string;
+  number: string;        // es. "2026-001"
+  date: string;          // YYYY-MM-DD
+  validityDays: number;
+  status: QuoteStatus;
+  recipient: string;     // intestatario (testo libero, più righe)
+  items: QuoteItem[];
+  notes?: string;
+  chargeStampDuty: boolean; // marca da bollo addebitata al cliente
+  createdAt: string;
+}
+
+// Dati di chi emette il preventivo (users/{uid}/settings/profile)
+export interface BusinessProfile {
+  name: string;
+  vatNumber?: string;
+  fiscalCode?: string;
+  address?: string;
+  email?: string;
+  phone?: string;
+  iban?: string;
+  taxNote?: string;      // dicitura fiscale in calce
+}
+
 export type AppData = {
   clients: Client[];
   projects: Project[];
   todos: Todo[];
+  quotes: Quote[];
 };

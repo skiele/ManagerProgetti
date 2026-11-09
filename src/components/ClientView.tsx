@@ -20,6 +20,7 @@ interface ClientViewProps {
     onDeleteTodo: (id: string) => void;
     onUpdateProjectNotes: (id: string, notes: string) => void;
     onDeleteClient: (clientId: string) => void;
+    onOpenProject: (id: string) => void;
 }
 
 const ClientView: React.FC<ClientViewProps> = ({ 
@@ -38,7 +39,8 @@ const ClientView: React.FC<ClientViewProps> = ({
     onEditProject, 
     onDeleteTodo, 
     onUpdateProjectNotes,
-    onDeleteClient
+    onDeleteClient,
+    onOpenProject
 }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between items-start mb-6 gap-4 pb-4 border-b border-muted dark:border-dark-muted">
@@ -69,6 +71,7 @@ const ClientView: React.FC<ClientViewProps> = ({
                     onEditProject={onEditProject}
                     onDeleteTodo={onDeleteTodo}
                     onUpdateProjectNotes={onUpdateProjectNotes}
+                    onOpenProject={onOpenProject}
                 />
             ))}
              {projects.length === 0 && (

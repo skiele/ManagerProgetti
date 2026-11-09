@@ -19,7 +19,7 @@ import {
   DocumentData,
   WriteBatch,
 } from "firebase/firestore";
-import { AppData, Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
+import { AppData, BusinessProfile, Client, Project, Quote, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
 
 /*
  * Struttura dati (schemaVersion 2):
@@ -28,18 +28,21 @@ import { AppData, Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPrior
  *   users/{uid}/clients/{id}     -> Client
  *   users/{uid}/projects/{id}    -> Project (i pagamenti restano annidati nel progetto)
  *   users/{uid}/todos/{id}       -> Todo
+ *   users/{uid}/quotes/{id}      -> Quote (preventivi, legati a un progetto)
+ *   users/{uid}/settings/profile -> BusinessProfile (dati di chi emette i preventivi)
  *
  * Ogni modifica scrive SOLO il documento interessato: niente più riscrittura dell'intero stato,
  * niente limite di 1 MiB sul totale dei dati, niente sovrascritture con stato obsoleto.
  */
 
 export const SCHEMA_VERSION = 2;
-export type CollectionName = 'clients' | 'projects' | 'todos';
-const COLLECTIONS: CollectionName[] = ['clients', 'projects', 'todos'];
+export type CollectionName = 'clients' | 'projects' | 'todos' | 'quotes';
+type DataKey = keyof AppData;
+const COLLECTIONS: DataKey[] = ['clients', 'projects', 'todos', 'quotes'];
 
 const userDocRef = (uid: string) => doc(db, 'users', uid);
-const colRef = (uid: string, name: CollectionName) => collection(db, 'users', uid, name);
-export const entityRef = (uid: string, name: CollectionName, id: string) => doc(db, 'users', uid, name, id);
+const colRef = (uid: string, name: DataKey) => collection(db, 'users', uid, name);
+export const entityRef = (uid: string, name: DataKey, id: string) => doc(db, 'users', uid, name, id);
 
 // Firestore accetta al massimo 500 operazioni per batch: spezza le scritture in blocchi.
 // NB: i blocchi non sono atomici tra loro, quindi va usato solo per operazioni idempotenti.
@@ -100,22 +103,35 @@ const sortTodos = (todos: Todo[]) =>
     (a.order ?? 0) - (b.order ?? 0) ||
     (a.dueDate || '').localeCompare(b.dueDate || '') ||
     a.task.localeCompare(b.task));
+const sortQuotes = (quotes: Quote[]) =>
+  [...quotes].sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number));
+
+const sorters: { [K in DataKey]: (items: any[]) => AppData[K] } = {
+  clients: sortClients,
+  projects: (items) => sortProjects(items.map(normalizeProject)),
+  todos: sortTodos,
+  quotes: sortQuotes,
+};
 
 // --- Scrittura di un insieme completo di dati nelle sottocollezioni ---
 
-const writeAll = (batch: ChunkedBatch, uid: string, data: AppData) => {
-  data.clients.filter(isEntity).forEach((c, i) =>
-    batch.set(entityRef(uid, 'clients', c.id), { ...withoutId(c), order: c.order ?? i }));
-  data.projects.filter(isEntity).map(normalizeProject).forEach(p =>
-    batch.set(entityRef(uid, 'projects', p.id), withoutId(p)));
-  data.todos.filter(isEntity).forEach(t =>
-    batch.set(entityRef(uid, 'todos', t.id), withoutId(t)));
+const writeCollection = (batch: ChunkedBatch, uid: string, name: DataKey, items: any[]) => {
+  items.filter(isEntity).forEach((item, i) => {
+    let data: any = item;
+    if (name === 'clients') data = { ...item, order: item.order ?? i };
+    if (name === 'projects') data = normalizeProject(item);
+    batch.set(entityRef(uid, name, item.id), withoutId(data));
+  });
 };
+
+const writeAll = (batch: ChunkedBatch, uid: string, data: AppData) =>
+  COLLECTIONS.forEach(name => writeCollection(batch, uid, name, data[name]));
 
 const asArrays = (raw: any): AppData => ({
   clients: Array.isArray(raw?.clients) ? raw.clients : [],
   projects: Array.isArray(raw?.projects) ? raw.projects : [],
   todos: Array.isArray(raw?.todos) ? raw.todos : [],
+  quotes: Array.isArray(raw?.quotes) ? raw.quotes : [],
 });
 
 /**
@@ -156,17 +172,13 @@ export const subscribeUserData = (
 ): (() => void) => {
   const state: Partial<AppData> = {};
   const emit = () => {
-    if (state.clients && state.projects && state.todos) {
-      onData({ clients: state.clients, projects: state.projects, todos: state.todos });
-    }
+    if (COLLECTIONS.every(name => state[name])) onData({ ...state } as AppData);
   };
 
   const unsubscribers = COLLECTIONS.map(name =>
     onSnapshot(colRef(uid, name), snap => {
-      const docs = snap.docs.map(d => ({ ...d.data(), id: d.id })) as any[];
-      if (name === 'clients') state.clients = sortClients(docs);
-      if (name === 'projects') state.projects = sortProjects(docs.map(normalizeProject));
-      if (name === 'todos') state.todos = sortTodos(docs);
+      const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+      (state as any)[name] = sorters[name](docs);
       emit();
     }, onError)
   );
@@ -201,36 +213,52 @@ export const commitOps = (uid: string, ops: BatchOp[]) => {
 
 // --- Backup ---
 
-export const exportData = async (uid: string): Promise<AppData> => {
-  const [clients, projects, todos] = await Promise.all(COLLECTIONS.map(async name => {
+export type BackupData = AppData & { profile?: BusinessProfile | null };
+
+export const exportData = async (uid: string): Promise<BackupData> => {
+  const lists = await Promise.all(COLLECTIONS.map(async name => {
     const snap = await getDocs(colRef(uid, name));
-    return snap.docs.map(d => ({ ...d.data(), id: d.id })) as any[];
+    return sorters[name](snap.docs.map(d => ({ ...d.data(), id: d.id })));
   }));
-  return { clients: sortClients(clients), projects: sortProjects(projects), todos: sortTodos(todos) };
+  const data = Object.fromEntries(COLLECTIONS.map((name, i) => [name, lists[i]])) as AppData;
+  const profile = await getDoc(profileRef(uid));
+  return { ...data, profile: profile.exists() ? (profile.data() as BusinessProfile) : null };
 };
 
 /**
- * Sostituisce tutti i dati con quelli del backup.
- * Prima scrive tutte le entità importate, poi elimina quelle che non sono nel backup:
- * se l'operazione si interrompe a metà non si perde nulla, al massimo restano elementi in più.
+ * Sostituisce i dati con quelli del backup.
+ * - Vengono toccate solo le collezioni presenti nel file: un backup vecchio senza preventivi
+ *   non cancella i preventivi esistenti.
+ * - Prima scrive tutte le entità importate, poi elimina quelle che non sono nel backup:
+ *   se l'operazione si interrompe a metà non si perde nulla, al massimo restano elementi in più.
  */
-export const importData = async (uid: string, data: AppData): Promise<void> => {
-  const imported = asArrays(data);
+export const importData = async (uid: string, raw: any): Promise<void> => {
+  const present = COLLECTIONS.filter(name => Array.isArray(raw?.[name]));
   const current = await exportData(uid);
 
   const batch = new ChunkedBatch();
-  writeAll(batch, uid, imported);
+  present.forEach(name => writeCollection(batch, uid, name, raw[name]));
+  if (raw?.profile && typeof raw.profile === 'object') batch.set(profileRef(uid), raw.profile);
   await batch.commit();
 
   const cleanup = new ChunkedBatch();
-  COLLECTIONS.forEach(name => {
-    const keep = new Set((imported[name] as { id: string }[]).filter(isEntity).map(e => e.id));
+  present.forEach(name => {
+    const keep = new Set((raw[name] as any[]).filter(isEntity).map(e => e.id));
     (current[name] as { id: string }[]).forEach(e => {
       if (!keep.has(e.id)) cleanup.delete(entityRef(uid, name, e.id));
     });
   });
   await cleanup.commit();
 };
+
+// --- Profilo (dati di chi emette i preventivi) ---
+
+const profileRef = (uid: string) => doc(db, 'users', uid, 'settings', 'profile');
+
+export const subscribeProfile = (uid: string, onProfile: (p: BusinessProfile | null) => void, onError: (e: Error) => void) =>
+  onSnapshot(profileRef(uid), snap => onProfile(snap.exists() ? (snap.data() as BusinessProfile) : null), onError);
+
+export const saveProfile = (uid: string, profile: BusinessProfile) => setDoc(profileRef(uid), profile);
 
 // --- Autenticazione ---
 

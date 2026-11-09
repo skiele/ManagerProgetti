@@ -1,12 +1,51 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import * as firebaseService from '../services/firebaseService';
 import { DownloadIcon, UploadIcon } from './icons';
+import { BusinessProfile } from '../types';
+import { DEFAULT_TAX_NOTE } from '../utils/quotes';
 
 interface SettingsViewProps {
   userId: string;
+  profile: BusinessProfile | null;
+  onSaveProfile: (profile: BusinessProfile) => void;
 }
 
-const SettingsView: React.FC<SettingsViewProps> = ({ userId }) => {
+const emptyProfile: BusinessProfile = { name: '', vatNumber: '', fiscalCode: '', address: '', email: '', phone: '', iban: '', taxNote: DEFAULT_TAX_NOTE };
+
+const ProfileForm: React.FC<{ profile: BusinessProfile | null; onSave: (p: BusinessProfile) => void }> = ({ profile, onSave }) => {
+  const [form, setForm] = useState<BusinessProfile>({ ...emptyProfile, ...profile });
+  const [saved, setSaved] = useState(false);
+  useEffect(() => setForm({ ...emptyProfile, ...profile }), [profile]);
+  const field = (key: keyof BusinessProfile, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
+    <label className="block text-sm">{label}
+      <input type="text" value={form[key] || ''} onChange={e => { setSaved(false); setForm(f => ({ ...f, [key]: e.target.value })); }} className="mt-1" {...props} />
+    </label>
+  );
+  return (
+    <form className="space-y-3" onSubmit={e => { e.preventDefault(); onSave(form); setSaved(true); }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {field('name', 'Nome e cognome / nome attività', { required: true })}
+        {field('vatNumber', 'Partita IVA')}
+        {field('fiscalCode', 'Codice fiscale')}
+        {field('iban', 'IBAN')}
+        {field('email', 'Email', { type: 'email' })}
+        {field('phone', 'Telefono')}
+      </div>
+      <label className="block text-sm">Indirizzo
+        <textarea value={form.address || ''} onChange={e => { setSaved(false); setForm(f => ({ ...f, address: e.target.value })); }} rows={2} className="mt-1" />
+      </label>
+      <label className="block text-sm">Dicitura fiscale in calce
+        <textarea value={form.taxNote || ''} onChange={e => { setSaved(false); setForm(f => ({ ...f, taxNote: e.target.value })); }} rows={3} className="mt-1" />
+      </label>
+      <div className="flex items-center justify-end gap-3">
+        {saved && <span className="text-sm text-green-600 dark:text-green-400">Salvato</span>}
+        <button type="submit" className="btn btn-primary px-4 py-2">Salva dati</button>
+      </div>
+    </form>
+  );
+};
+
+const SettingsView: React.FC<SettingsViewProps> = ({ userId, profile, onSaveProfile }) => {
 
   const handleExportData = async () => {
     try {
@@ -77,9 +116,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userId }) => {
       
       <div className="space-y-8">
         <div>
+          <h2 className="text-xl font-semibold">Dati per i preventivi</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-1 mb-3">
+            Compaiono nell'intestazione e in calce di ogni preventivo. La dicitura proposta è quella del regime forfettario: verificala con il tuo commercialista.
+          </p>
+          <ProfileForm profile={profile} onSave={onSaveProfile} />
+        </div>
+
+        <div>
           <h2 className="text-xl font-semibold">Esporta Dati</h2>
           <p className="text-gray-500 dark:text-gray-400 mt-1 mb-3">
-            Crea un file di backup in formato JSON con tutti i tuoi clienti, progetti e attività. Conservalo in un posto sicuro.
+            Crea un file di backup in formato JSON con clienti, progetti, attività, preventivi e i tuoi dati. Conservalo in un posto sicuro.
           </p>
           <button 
             onClick={handleExportData}

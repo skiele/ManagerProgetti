@@ -52,3 +52,35 @@
       transition-duration: 150ms;
   }
 }
+/* ---------- Preventivo stampabile (Salva PDF) ---------- */
+@media screen {
+  #print-root { display: none; }
+}
+
+@media print {
+  @page { size: A4; margin: 18mm 16mm; }
+  body > *:not(#print-root) { display: none !important; }
+  html, body { background: #fff !important; color: #111 !important; }
+  #print-root { display: block; }
+}
+
+.quote-doc { font-size: 11pt; line-height: 1.45; color: #111; background: #fff; }
+.quote-doc p { margin: 0; }
+.quote-doc section, .quote-doc .qd-subject { margin-top: 18pt; }
+.quote-doc .qd-header { display: flex; justify-content: space-between; gap: 24pt; padding-bottom: 12pt; border-bottom: 1.5pt solid #111; }
+.quote-doc .qd-issuer { font-size: 14pt; font-weight: 700; }
+.quote-doc .qd-meta { text-align: right; }
+.quote-doc .qd-title { font-size: 18pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1pt; }
+.quote-doc .qd-label { font-weight: 700; }
+.quote-doc .qd-pre { white-space: pre-line; }
+.quote-doc .qd-small { font-size: 8.5pt; color: #444; margin-top: 12pt; }
+.quote-doc table { width: 100%; border-collapse: collapse; margin-top: 12pt; }
+.quote-doc .qd-table th { text-align: left; border-bottom: 1pt solid #111; padding: 4pt; font-size: 9.5pt; }
+.quote-doc .qd-table td { border-bottom: 0.5pt solid #ccc; padding: 6pt 4pt; vertical-align: top; }
+.quote-doc .qd-table tr { break-inside: avoid; }
+.quote-doc .num, .quote-doc .qd-table th.num { text-align: right; white-space: nowrap; }
+.quote-doc .qd-totals { width: 50%; margin-left: auto; }
+.quote-doc .qd-totals td { padding: 3pt 4pt; }
+.quote-doc .qd-grand td { font-size: 13pt; font-weight: 700; border-top: 1pt solid #111; }
+.quote-doc .qd-sign { width: 45%; margin-left: auto; margin-top: 36pt; break-inside: avoid; }
+.quote-doc .qd-line { border-bottom: 0.75pt solid #111; height: 28pt; }
