@@ -6,7 +6,7 @@ const path = require('path');
 
 const AUTH = 'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1';
 const FS = 'http://127.0.0.1:8080/v1/projects/progetta-800ca/databases/(default)/documents';
-const APP = 'http://127.0.0.1:5173';
+const APP = process.env.APP_URL || 'http://127.0.0.1:5173';
 const OUT = require('os').tmpdir();
 
 let failures = 0;

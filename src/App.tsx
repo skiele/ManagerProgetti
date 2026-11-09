@@ -2,8 +2,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { deleteField } from 'firebase/firestore';
 import { User } from 'firebase/auth';
-import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment, AppData, Quote, QuoteStatus, BusinessProfile } from './types';
-import { CalendarIcon, ChartBarIcon, PlusIcon, UsersIcon, LogOutIcon, SunIcon, MoonIcon, CogIcon, MenuIcon, XIcon, ListTodoIcon, BriefcaseIcon } from './components/icons';
+import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment, AppData, Quote, QuoteStatus, BusinessProfile, TextDocument, DocumentKind } from './types';
+import { CalendarIcon, ChartBarIcon, PlusIcon, UsersIcon, LogOutIcon, SunIcon, MoonIcon, CogIcon, MenuIcon, XIcon, ListTodoIcon, BriefcaseIcon, FileTextIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
 import TaskView from './components/TaskView';
@@ -15,6 +15,8 @@ import SettingsView from './components/SettingsView';
 import ProjectsView from './components/ProjectsView';
 import ProjectDetail from './components/ProjectDetail';
 import QuotesTab from './components/QuotesTab';
+import DocumentEditor from './components/DocumentEditor';
+import DocumentsList from './components/DocumentsList';
 import { quoteTotals } from './utils/quotes';
 import { formatCurrency } from './utils/formatting';
 import EntityForm, { FormType } from './components/EntityForm';
@@ -63,6 +65,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
   const projects = data?.projects ?? [];
   const todos = data?.todos ?? [];
   const quotes = data?.quotes ?? [];
+  const documents = data?.documents ?? [];
 
   const draggedClientIdRef = useRef<string | null>(null);
   const navRef = useRef<HTMLElement>(null);
@@ -224,11 +227,12 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
   };
 
   const handleDeleteClient = (clientId: string) => {
-    if (window.confirm('Sei sicuro di voler eliminare questo cliente? Verranno eliminati anche tutti i suoi progetti e le relative attività.')) {
+    if (window.confirm('Sei sicuro di voler eliminare questo cliente? Verranno eliminati anche tutti i suoi progetti con attività e preventivi. I documenti restano, senza progetto.')) {
         const projectIdsToDelete = new Set(projects.filter(p => p.clientId === clientId).map(p => p.id));
         const ops: BatchOp[] = [
           ...todos.filter(t => projectIdsToDelete.has(t.projectId)).map((t): BatchOp => ({ type: 'delete', name: 'todos', id: t.id })),
           ...quotes.filter(q => projectIdsToDelete.has(q.projectId)).map((q): BatchOp => ({ type: 'delete', name: 'quotes', id: q.id })),
+          ...documents.filter(d => d.projectId && projectIdsToDelete.has(d.projectId)).map((d): BatchOp => ({ type: 'update', name: 'documents', id: d.id, data: { projectId: null } })),
           ...[...projectIdsToDelete].map((id): BatchOp => ({ type: 'delete', name: 'projects', id })),
           { type: 'delete', name: 'clients', id: clientId },
         ];
@@ -241,10 +245,11 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
   };
 
   const handleDeleteProject = (projectId: string) => {
-      if (window.confirm('Sei sicuro di voler eliminare questo progetto? Verranno eliminate anche tutte le sue attività e i suoi preventivi.')) {
+      if (window.confirm('Sei sicuro di voler eliminare questo progetto? Verranno eliminate anche tutte le sue attività e i suoi preventivi. I documenti restano, senza progetto.')) {
           const ops: BatchOp[] = [
             ...todos.filter(t => t.projectId === projectId).map((t): BatchOp => ({ type: 'delete', name: 'todos', id: t.id })),
             ...quotes.filter(q => q.projectId === projectId).map((q): BatchOp => ({ type: 'delete', name: 'quotes', id: q.id })),
+            ...documents.filter(d => d.projectId === projectId).map((d): BatchOp => ({ type: 'update', name: 'documents', id: d.id, data: { projectId: null } })),
             { type: 'delete', name: 'projects', id: projectId },
           ];
           persist(firebaseService.commitOps(userId, ops));
@@ -253,6 +258,27 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
             setSelectedView(project ? project.clientId : 'projects');
           }
       }
+  };
+
+  // --- Documenti ---
+
+  const handleCreateDocument = (projectId: string | null) => {
+    const now = new Date().toISOString();
+    const document: TextDocument = {
+      id: crypto.randomUUID(), projectId, title: 'Nuovo documento', kind: DocumentKind.Soggetto,
+      content: '', createdAt: now, updatedAt: now, updatedBy: 'app', revision: 1,
+    };
+    persist(firebaseService.saveEntity(userId, 'documents', document));
+    handleSelectView(`doc:${document.id}`);
+  };
+
+  const handleDeleteDocument = (document: TextDocument) => {
+    if (!window.confirm(`Eliminare definitivamente "${document.title}" e tutte le sue versioni precedenti?`)) return;
+    handleSelectView(document.projectId ? `project:${document.projectId}` : 'documents');
+    persist(firebaseService.listRevisions(userId, document.id).then(revs => firebaseService.commitOps(userId, [
+      ...revs.slice(0, 450).map((r): BatchOp => ({ type: 'delete', name: 'revisions', id: r.id })),
+      { type: 'delete', name: 'documents', id: document.id },
+    ])));
   };
 
   // --- Preventivi ---
@@ -541,6 +567,10 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
     () => selectedView.startsWith('project:') ? projects.find(p => p.id === selectedView.slice('project:'.length)) : undefined,
     [projects, selectedView]);
   const openProject = (projectId: string) => handleSelectView(`project:${projectId}`);
+  const selectedDocument = useMemo(
+    () => selectedView.startsWith('doc:') ? documents.find(d => d.id === selectedView.slice('doc:'.length)) : undefined,
+    [documents, selectedView]);
+  const openDocument = (id: string) => handleSelectView(`doc:${id}`);
   
   const getPriorityClass = (clientId: string): string => {
     const priority = clientPriorities.get(clientId);
@@ -575,7 +605,9 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
       ? { label: 'Aggiungi Progetto', action: () => openModal('project', selectedClient.id) }
       : selectedView === 'projects'
         ? { label: 'Aggiungi Progetto', action: () => openModal('project') }
-        : { label: 'Aggiungi Cliente', action: () => openModal('client') };
+        : selectedView === 'documents'
+          ? { label: 'Nuovo Documento', action: () => handleCreateDocument(null) }
+          : { label: 'Aggiungi Cliente', action: () => openModal('client') };
 
   if (loadError) {
     return <FullScreenMessage>
@@ -631,6 +663,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
             <ul>
                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'dashboard' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('dashboard')}><ChartBarIcon className="w-5 h-5 mr-3"/> Dashboard</li>
                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'projects' || selectedView.startsWith('project:') ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('projects')}><BriefcaseIcon className="w-5 h-5 mr-3"/> Progetti</li>
+                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'documents' || selectedView.startsWith('doc:') ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('documents')}><FileTextIcon className="w-5 h-5 mr-3"/> Documenti</li>
                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'tasks' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('tasks')}><ListTodoIcon className="w-5 h-5 mr-3"/> Attività</li>
                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'calendar' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('calendar')}><CalendarIcon className="w-5 h-5 mr-3"/> Calendario</li>
                  <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'settings' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('settings')}><CogIcon className="w-5 h-5 mr-3"/> Impostazioni</li>
@@ -668,6 +701,24 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
         />}
         {selectedView === 'tasks' && <TaskView todos={todos} projects={projects} clients={clients} onToggleTodo={handleToggleTodo} onDeleteTodo={handleDeleteTodo} onReorderTodos={handleReorderTodos}/>}
         {selectedView === 'calendar' && <CalendarView todos={todos} projects={projects} clients={clients}/>}
+        {selectedView === 'documents' && (
+            <div className="max-w-4xl mx-auto">
+                <h1 className="text-3xl font-bold mb-6">Documenti</h1>
+                <DocumentsList documents={documents} projects={projects} clients={clients} groupByProject onOpen={openDocument} onCreate={() => handleCreateDocument(null)} />
+            </div>
+        )}
+        {selectedDocument && (
+            <DocumentEditor
+                key={selectedDocument.id}
+                userId={userId}
+                document={selectedDocument}
+                projects={projects}
+                clients={clients}
+                onBack={() => handleSelectView(selectedDocument.projectId ? `project:${selectedDocument.projectId}` : 'documents')}
+                onDelete={handleDeleteDocument}
+                persist={persist}
+            />
+        )}
         {selectedView === 'projects' && <ProjectsView projects={projects} clients={clients} projectTotals={allProjectTotals} onOpenProject={openProject} />}
         {selectedProject && (
             <ProjectDetail
@@ -688,6 +739,15 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
                 onAddPayment={projectId => openModal('payment', projectId)}
                 onDeletePayment={handleDeletePayment}
                 quotesCount={quotes.filter(q => q.projectId === selectedProject.id).length}
+                documentsCount={documents.filter(d => d.projectId === selectedProject.id).length}
+                documentsTab={
+                    <DocumentsList
+                        documents={documents.filter(d => d.projectId === selectedProject.id)}
+                        projects={projects} clients={clients} groupByProject={false}
+                        onOpen={openDocument}
+                        onCreate={() => handleCreateDocument(selectedProject.id)}
+                    />
+                }
                 quotesTab={
                     <QuotesTab
                         project={selectedProject}
@@ -727,13 +787,13 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
         )}
       </main>
       
-      <button 
+      {!selectedDocument && <button 
         onClick={fab.action}
         className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-primary text-primary-foreground dark:bg-dark-primary dark:text-dark-primary-foreground shadow-lg hover:bg-primary-hover dark:hover:bg-dark-primary-hover flex items-center justify-center transform hover:scale-105 transition-transform"
         aria-label={fab.label}
       >
         <PlusIcon className="w-7 h-7" />
-      </button>
+      </button>}
 
       {saveError && (
         <div role="alert" className="fixed bottom-24 left-4 right-4 md:left-auto md:max-w-md z-50 flex items-start gap-3 p-4 rounded-lg shadow-lg bg-red-600 text-white">

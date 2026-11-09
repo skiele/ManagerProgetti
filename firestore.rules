@@ -22,6 +22,16 @@ service cloud.firestore {
       }
     }
 
+    // Collegamenti del connettore Claude: il nome del documento è l'hash SHA-256 del segreto.
+    // L'utente può crearli (solo per sé), vederli e revocarli; il segreto non è mai salvato.
+    match /mcpTokens/{tokenHash} {
+      allow read, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.keys().hasOnly(['uid', 'label', 'createdAt']);
+      allow update: if false;
+    }
+
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }

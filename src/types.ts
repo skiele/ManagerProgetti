@@ -98,9 +98,50 @@ export interface BusinessProfile {
   taxNote?: string;      // dicitura fiscale in calce
 }
 
+export enum DocumentKind {
+  Soggetto = 'soggetto',
+  Trattamento = 'trattamento',
+  Sceneggiatura = 'sceneggiatura',
+  Note = 'note',
+  Altro = 'altro',
+}
+
+// Testo (Markdown) in users/{uid}/documents/{id}
+export interface TextDocument {
+  id: string;
+  projectId: string | null;   // null = non legato a un progetto
+  title: string;
+  kind: DocumentKind;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: 'app' | 'claude';
+  revision: number;           // cresce a ogni salvataggio
+}
+
+// Versione precedente di un documento, in users/{uid}/revisions/{id}
+export interface DocumentRevision {
+  id: string;
+  documentId: string;
+  title: string;
+  content: string;
+  revision: number;
+  savedAt: string;
+  reason: string;
+}
+
+// Azione eseguita da Claude tramite il connettore, in users/{uid}/activity/{id}
+export interface ClaudeActivity {
+  id: string;
+  at: string;
+  tool: string;
+  summary: string;
+}
+
 export type AppData = {
   clients: Client[];
   projects: Project[];
   todos: Todo[];
   quotes: Quote[];
+  documents: TextDocument[];
 };

@@ -3,6 +3,7 @@ import * as firebaseService from '../services/firebaseService';
 import { DownloadIcon, UploadIcon } from './icons';
 import { BusinessProfile } from '../types';
 import { DEFAULT_TAX_NOTE } from '../utils/quotes';
+import ClaudeConnector from './ClaudeConnector';
 
 interface SettingsViewProps {
   userId: string;
@@ -124,9 +125,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userId, profile, onSaveProf
         </div>
 
         <div>
+          <h2 className="text-xl font-semibold">Claude</h2>
+          <ClaudeConnector userId={userId} />
+        </div>
+
+        <div>
           <h2 className="text-xl font-semibold">Esporta Dati</h2>
           <p className="text-gray-500 dark:text-gray-400 mt-1 mb-3">
-            Crea un file di backup in formato JSON con clienti, progetti, attività, preventivi e i tuoi dati. Conservalo in un posto sicuro.
+            Crea un file di backup in formato JSON con clienti, progetti, attività, preventivi, documenti e i tuoi dati (le versioni precedenti dei documenti non sono incluse). Conservalo in un posto sicuro.
           </p>
           <button 
             onClick={handleExportData}

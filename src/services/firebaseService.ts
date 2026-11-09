@@ -15,11 +15,16 @@ import {
   updateDoc,
   onSnapshot,
   writeBatch,
+  query,
+  where,
+  orderBy,
+  limit,
+  deleteDoc,
   DocumentReference,
   DocumentData,
   WriteBatch,
 } from "firebase/firestore";
-import { AppData, BusinessProfile, Client, Project, Quote, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
+import { AppData, BusinessProfile, Client, ClaudeActivity, DocumentRevision, Project, Quote, TextDocument, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
 
 /*
  * Struttura dati (schemaVersion 2):
@@ -29,6 +34,10 @@ import { AppData, BusinessProfile, Client, Project, Quote, Todo, WorkStatus, Pay
  *   users/{uid}/projects/{id}    -> Project (i pagamenti restano annidati nel progetto)
  *   users/{uid}/todos/{id}       -> Todo
  *   users/{uid}/quotes/{id}      -> Quote (preventivi, legati a un progetto)
+ *   users/{uid}/documents/{id}   -> TextDocument (soggetti, trattamenti, note: testo Markdown)
+ *   users/{uid}/revisions/{id}   -> DocumentRevision (versioni precedenti dei documenti)
+ *   users/{uid}/activity/{id}    -> ClaudeActivity (registro delle azioni di Claude)
+ *   mcpTokens/{sha256}           -> { uid } collegamenti del connettore Claude (solo l'hash del segreto)
  *   users/{uid}/settings/profile -> BusinessProfile (dati di chi emette i preventivi)
  *
  * Ogni modifica scrive SOLO il documento interessato: niente più riscrittura dell'intero stato,
@@ -36,13 +45,13 @@ import { AppData, BusinessProfile, Client, Project, Quote, Todo, WorkStatus, Pay
  */
 
 export const SCHEMA_VERSION = 2;
-export type CollectionName = 'clients' | 'projects' | 'todos' | 'quotes';
+export type CollectionName = 'clients' | 'projects' | 'todos' | 'quotes' | 'documents' | 'revisions';
 type DataKey = keyof AppData;
-const COLLECTIONS: DataKey[] = ['clients', 'projects', 'todos', 'quotes'];
+const COLLECTIONS: DataKey[] = ['clients', 'projects', 'todos', 'quotes', 'documents'];
 
 const userDocRef = (uid: string) => doc(db, 'users', uid);
-const colRef = (uid: string, name: DataKey) => collection(db, 'users', uid, name);
-export const entityRef = (uid: string, name: DataKey, id: string) => doc(db, 'users', uid, name, id);
+const colRef = (uid: string, name: CollectionName | 'activity') => collection(db, 'users', uid, name);
+export const entityRef = (uid: string, name: CollectionName, id: string) => doc(db, 'users', uid, name, id);
 
 // Firestore accetta al massimo 500 operazioni per batch: spezza le scritture in blocchi.
 // NB: i blocchi non sono atomici tra loro, quindi va usato solo per operazioni idempotenti.
@@ -111,6 +120,7 @@ const sorters: { [K in DataKey]: (items: any[]) => AppData[K] } = {
   projects: (items) => sortProjects(items.map(normalizeProject)),
   todos: sortTodos,
   quotes: sortQuotes,
+  documents: (items: TextDocument[]) => [...items].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')),
 };
 
 // --- Scrittura di un insieme completo di dati nelle sottocollezioni ---
@@ -132,6 +142,7 @@ const asArrays = (raw: any): AppData => ({
   projects: Array.isArray(raw?.projects) ? raw.projects : [],
   todos: Array.isArray(raw?.todos) ? raw.todos : [],
   quotes: Array.isArray(raw?.quotes) ? raw.quotes : [],
+  documents: Array.isArray(raw?.documents) ? raw.documents : [],
 });
 
 /**
@@ -250,6 +261,45 @@ export const importData = async (uid: string, raw: any): Promise<void> => {
   });
   await cleanup.commit();
 };
+
+// --- Versioni dei documenti ---
+
+export const listRevisions = async (uid: string, documentId: string): Promise<DocumentRevision[]> => {
+  const snap = await getDocs(query(colRef(uid, 'revisions'), where('documentId', '==', documentId)));
+  return snap.docs
+    .map(d => ({ ...d.data(), id: d.id }) as DocumentRevision)
+    .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+};
+
+// --- Connettore Claude ---
+
+const toBase64Url = (bytes: Uint8Array) =>
+  btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+const sha256Hex = async (text: string) => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+export interface ClaudeLink { id: string; label: string; createdAt: string }
+
+/** Crea un nuovo segreto per il connettore. Su Firestore viene salvato solo l'hash. */
+export const createClaudeLink = async (uid: string, label: string): Promise<string> => {
+  const token = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+  await setDoc(doc(db, 'mcpTokens', await sha256Hex(token)), { uid, label, createdAt: new Date().toISOString() });
+  return token;
+};
+
+export const subscribeClaudeLinks = (uid: string, onLinks: (links: ClaudeLink[]) => void, onError: (e: Error) => void) =>
+  onSnapshot(query(collection(db, 'mcpTokens'), where('uid', '==', uid)), snap =>
+    onLinks(snap.docs.map(d => ({ id: d.id, label: d.data().label, createdAt: d.data().createdAt }))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))), onError);
+
+export const revokeClaudeLink = (id: string) => deleteDoc(doc(db, 'mcpTokens', id));
+
+export const subscribeClaudeActivity = (uid: string, onItems: (items: ClaudeActivity[]) => void, onError: (e: Error) => void) =>
+  onSnapshot(query(colRef(uid, 'activity'), orderBy('at', 'desc'), limit(30)), snap =>
+    onItems(snap.docs.map(d => ({ ...d.data(), id: d.id }) as ClaudeActivity)), onError);
 
 // --- Profilo (dati di chi emette i preventivi) ---
 
