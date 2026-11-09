@@ -24,6 +24,7 @@ export interface Client {
   id: string;
   name: string;
   email?: string;
+  order?: number;
 }
 
 export interface Payment {
@@ -56,3 +57,9 @@ export interface Todo {
   dueDate?: string;
   order?: number;
 }
+
+export type AppData = {
+  clients: Client[];
+  projects: Project[];
+  todos: Todo[];
+};

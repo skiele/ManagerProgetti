@@ -1,7 +1,9 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment } from './types';
-import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon, MenuIcon, XIcon, EditIcon, ListTodoIcon } from './components/icons';
+import { deleteField } from 'firebase/firestore';
+import { User } from 'firebase/auth';
+import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment, AppData } from './types';
+import { CalendarIcon, ChartBarIcon, PlusIcon, UsersIcon, LogOutIcon, SunIcon, MoonIcon, CogIcon, MenuIcon, XIcon, ListTodoIcon } from './components/icons';
 import Modal from './components/Modal';
 import CalendarView from './components/CalendarView';
 import TaskView from './components/TaskView';
@@ -10,44 +12,64 @@ import SetupScreen from './components/SetupScreen';
 import Dashboard from './components/Dashboard';
 import ClientView from './components/ClientView';
 import SettingsView from './components/SettingsView';
+import EntityForm, { FormType } from './components/EntityForm';
+import AiProjectForm, { AiProjectResult } from './components/AiProjectForm';
 import * as firebaseService from './services/firebaseService';
-import { GoogleGenAI, Type } from '@google/genai';
-import { User } from 'firebase/auth';
+import { BatchOp } from './services/firebaseService';
 
 
-type AppState = 'loading' | 'authenticated' | 'unauthenticated';
-type AppData = {
-  clients: Client[];
-  projects: Project[];
-  todos: Todo[];
-};
+type AppState = 'loading' | 'authenticated' | 'unauthenticated' | 'error';
 type Theme = 'light' | 'dark';
 
+const FullScreenMessage: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="flex flex-col items-center justify-center h-screen gap-4 p-6 text-center bg-background text-foreground dark:bg-dark-background dark:text-dark-foreground">{children}</div>
+);
+
+// Calcola lo stato di pagamento a partire dai pagamenti registrati
+const computePaymentStatus = (project: Project, payments: Payment[], projectTotal: number): PaymentStatus => {
+  const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  if (totalPaid > 0 && totalPaid < projectTotal) return PaymentStatus.ParzialmentePagato;
+  if (totalPaid > 0 && totalPaid >= projectTotal) return PaymentStatus.Pagato;
+  if (project.paymentStatus === PaymentStatus.Pagato || project.paymentStatus === PaymentStatus.ParzialmentePagato) {
+    return PaymentStatus.Fatturato;
+  }
+  return project.paymentStatus;
+};
+
 // --- Main Application Component (Protected) ---
-const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: string }> = ({ onLogout, initialData, userId }) => {
-  const [clients, setClients] = useState<Client[]>(initialData.clients);
-  const [projects, setProjects] = useState<Project[]>(initialData.projects);
-  const [todos, setTodos] = useState<Todo[]>(initialData.todos);
+const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout, userId }) => {
+  // L'unica fonte di verità è Firestore: lo stato si aggiorna dagli snapshot in tempo reale
+  // (che includono subito anche le scritture locali, pure offline).
+  const [data, setData] = useState<AppData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return firebaseService.subscribeUserData(userId, setData, (error) => {
+      console.error("Errore nella lettura dei dati:", error);
+      setLoadError(error.message);
+    });
+  }, [userId]);
+
+  const clients = data?.clients ?? [];
+  const projects = data?.projects ?? [];
+  const todos = data?.todos ?? [];
+
   const draggedClientIdRef = useRef<string | null>(null);
   const navRef = useRef<HTMLElement>(null);
   const [isNavScrollable, setIsNavScrollable] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-
-  // Helper function to save the current state to Firestore
-  const saveDataToCloud = (updatedData: Partial<AppData>) => {
-    const fullData = {
-      clients,
-      projects,
-      todos,
-      ...updatedData,
-    };
-    firebaseService.saveData(userId, fullData);
-  };
+  // Ogni scrittura passa da qui: gli errori vengono mostrati invece di essere ignorati.
+  const persist = (operation: Promise<unknown>) => operation.catch((error: Error) => {
+    console.error("Errore di salvataggio:", error);
+    setSaveError(`Salvataggio non riuscito: ${error.message}`);
+  });
 
   const [selectedView, setSelectedView] = useState<string>('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalContent, setModalContent] = useState<'client' | 'project' | 'todo' | 'payment' | 'editProject' | null>(null);
+  const [modalContent, setModalContent] = useState<FormType | null>(null);
+  const [modalKey, setModalKey] = useState(0);
   const [currentContextId, setCurrentContextId] = useState<string | null>(null);
 
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -80,54 +102,46 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     resizeObserver.observe(navElement);
     checkScrollable();
     return () => resizeObserver.disconnect();
-  }, [clients]);
+  }, [clients, data === null]);
 
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
   }
+
+  const projectTotalOf = (project: Project) =>
+    project.value + todos.filter(t => t.projectId === project.id).reduce((sum, todo) => sum + todo.income, 0);
+
+  const nextTodoOrder = () => Math.max(0, ...todos.map(t => t.order ?? 0)) + 1;
 
   const handleAddClient = (name: string, email?: string) => {
     const newClient: Client = {
       id: crypto.randomUUID(),
       name,
       ...(email && { email }),
+      order: Math.max(0, ...clients.map(c => c.order ?? 0)) + 1,
     };
-    setClients(prev => {
-      const newClients = [...prev, newClient];
-      saveDataToCloud({ clients: newClients });
-      return newClients;
-    });
+    persist(firebaseService.saveEntity(userId, 'clients', newClient));
   };
-  
-  const handleAddProject = (clientId: string, name: string, value: number, notes?: string): Project => {
-    const newProject: Project = {
-      id: crypto.randomUUID(),
-      clientId,
-      name,
-      value,
-      workStatus: WorkStatus.PreventivoDaInviare,
-      paymentStatus: PaymentStatus.DaFatturare,
-      priority: ProjectPriority.Media,
-      createdAt: new Date().toISOString(),
-      ...(notes && { notes }),
-      payments: [],
-    };
-    setProjects(prev => {
-      const newProjects = [...prev, newProject];
-      saveDataToCloud({ projects: newProjects });
-      return newProjects;
-    });
-    return newProject;
+
+  const buildProject = (clientId: string, name: string, value: number, notes?: string): Project => ({
+    id: crypto.randomUUID(),
+    clientId,
+    name,
+    value,
+    workStatus: WorkStatus.PreventivoDaInviare,
+    paymentStatus: PaymentStatus.DaFatturare,
+    priority: ProjectPriority.Media,
+    createdAt: new Date().toISOString(),
+    ...(notes && { notes }),
+    payments: [],
+  });
+
+  const handleAddProject = (clientId: string, name: string, value: number) => {
+    persist(firebaseService.saveEntity(userId, 'projects', buildProject(clientId, name, value)));
   };
 
   const handleUpdateProject = (projectId: string, data: { name: string; value: number }) => {
-    setProjects(prev => {
-      const newProjects = prev.map(p =>
-        p.id === projectId ? { ...p, name: data.name, value: data.value } : p
-      );
-      saveDataToCloud({ projects: newProjects });
-      return newProjects;
-    });
+    persist(firebaseService.updateEntity(userId, 'projects', projectId, { name: data.name, value: data.value }));
   };
 
   const handleAddTodo = (projectId: string, task: string, income: number, dueDate?: string) => {
@@ -138,140 +152,64 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
       income,
       completed: false,
       ...(dueDate && { dueDate }),
-      order: todos.length // Assign default order at the end
+      order: nextTodoOrder(),
     };
-    setTodos(prev => {
-      const newTodos = [...prev, newTodo];
-      saveDataToCloud({ todos: newTodos });
-      return newTodos;
-    });
+    persist(firebaseService.saveEntity(userId, 'todos', newTodo));
+  };
+
+  // Progetto + attività generati dall'AI: un'unica scrittura atomica
+  const handleAiGenerated = (clientId: string) => async (result: AiProjectResult) => {
+    const project = buildProject(clientId, result.projectName, result.projectValue, result.projectNotes);
+    const baseOrder = nextTodoOrder();
+    const ops: BatchOp[] = [
+      { type: 'set', name: 'projects', entity: project },
+      ...(result.todos || []).map((todo, i): BatchOp => ({
+        type: 'set', name: 'todos',
+        entity: { id: crypto.randomUUID(), projectId: project.id, task: todo.task, income: todo.income, completed: false, order: baseOrder + i } as Todo,
+      })),
+    ];
+    await firebaseService.commitOps(userId, ops);
   };
 
   const handleReorderTodos = (updatedTodos: Todo[]) => {
-      setTodos(prev => {
-          // Create a map of updated todos for O(1) lookup
-          const updatedMap = new Map(updatedTodos.map(t => [t.id, t]));
-          
-          // Merge updated todos with existing ones
-          const newTodos = prev.map(t => updatedMap.get(t.id) || t);
-          
-          saveDataToCloud({ todos: newTodos });
-          return newTodos;
-      });
-  }
+    persist(firebaseService.commitOps(userId, updatedTodos.map((t): BatchOp => ({
+      type: 'update', name: 'todos', id: t.id, data: { order: t.order },
+    }))));
+  };
   
   const handleAddPayment = (projectId: string, amount: number, date: string) => {
     const project = projects.find(p => p.id === projectId);
     if (!project) return;
 
-    setProjects(prev => {
-      const newProjects = prev.map(p => {
-        if (p.id === projectId) {
-          const newPayment: Payment = { id: crypto.randomUUID(), amount, date };
-          const updatedPayments = [...(p.payments || []), newPayment];
-          const totalPaid = updatedPayments.reduce((sum, payment) => sum + payment.amount, 0);
-
-          const projectTodos = todos.filter(t => t.projectId === projectId);
-          const projectTotal = p.value + projectTodos.reduce((sum, todo) => sum + todo.income, 0);
-
-          let newPaymentStatus = p.paymentStatus;
-          if (totalPaid > 0 && totalPaid < projectTotal) {
-            newPaymentStatus = PaymentStatus.ParzialmentePagato;
-          } else if (totalPaid >= projectTotal) {
-            newPaymentStatus = PaymentStatus.Pagato;
-          } else if (totalPaid <= 0 && (p.paymentStatus === PaymentStatus.Pagato || p.paymentStatus === PaymentStatus.ParzialmentePagato)) {
-             newPaymentStatus = PaymentStatus.Fatturato;
-          }
-          
-          return { ...p, payments: updatedPayments, paymentStatus: newPaymentStatus };
-        }
-        return p;
-      });
-      saveDataToCloud({ projects: newProjects });
-      return newProjects;
-    });
+    const newPayment: Payment = { id: crypto.randomUUID(), amount, date };
+    const payments = [...(project.payments || []), newPayment];
+    persist(firebaseService.updateEntity(userId, 'projects', projectId, {
+      payments,
+      paymentStatus: computePaymentStatus(project, payments, projectTotalOf(project)),
+    }));
   };
   
   const handleDeletePayment = (projectId: string, paymentId: string) => {
     if (!window.confirm("Sei sicuro di voler eliminare questo pagamento?")) return;
-    
-    setProjects(prev => {
-        const newProjects = prev.map(p => {
-            if (p.id === projectId) {
-                const updatedPayments = (p.payments || []).filter(payment => payment.id !== paymentId);
-                const totalPaid = updatedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
 
-                const projectTodos = todos.filter(t => t.projectId === projectId);
-                const projectTotal = p.value + projectTodos.reduce((sum, todo) => sum + todo.income, 0);
-
-                let newPaymentStatus = p.paymentStatus;
-                if (totalPaid <= 0) {
-                   if (p.paymentStatus !== PaymentStatus.DaFatturare) {
-                     newPaymentStatus = PaymentStatus.Fatturato;
-                   }
-                } else if (totalPaid > 0 && totalPaid < projectTotal) {
-                    newPaymentStatus = PaymentStatus.ParzialmentePagato;
-                } else if (totalPaid >= projectTotal) {
-                    newPaymentStatus = PaymentStatus.Pagato;
-                }
-
-                return { ...p, payments: updatedPayments, paymentStatus: newPaymentStatus };
-            }
-            return p;
-        });
-        saveDataToCloud({ projects: newProjects });
-        return newProjects;
-    });
-  };
-
-  const handleDuplicateProject = (projectId: string) => {
-    const originalProject = projects.find(p => p.id === projectId);
-    if (!originalProject) return;
-
-    const newProject: Project = {
-        ...originalProject,
-        id: crypto.randomUUID(),
-        name: `${originalProject.name} (Copia)`,
-        workStatus: WorkStatus.PreventivoDaInviare,
-        paymentStatus: PaymentStatus.DaFatturare,
-        createdAt: new Date().toISOString(),
-        paidAt: undefined,
-        payments: [],
-    };
-
-    const originalTodos = todos.filter(t => t.projectId === projectId);
-    const newTodos: Todo[] = originalTodos.map(todo => ({
-        ...todo,
-        id: crypto.randomUUID(),
-        projectId: newProject.id,
-        completed: false,
-        order: todo.order 
+    const payments = (project.payments || []).filter(payment => payment.id !== paymentId);
+    persist(firebaseService.updateEntity(userId, 'projects', projectId, {
+      payments,
+      paymentStatus: computePaymentStatus(project, payments, projectTotalOf(project)),
     }));
-
-    setProjects(prev => {
-      const newProjects = [...prev, newProject];
-      setTodos(prevTodos => {
-        const updatedTodos = [...prevTodos, ...newTodos];
-        saveDataToCloud({ projects: newProjects, todos: updatedTodos });
-        return updatedTodos;
-      });
-      return newProjects;
-    });
   };
 
   const handleDeleteClient = (clientId: string) => {
     if (window.confirm('Sei sicuro di voler eliminare questo cliente? Verranno eliminati anche tutti i suoi progetti e le relative attività.')) {
-        const projectsToDelete = projects.filter(p => p.clientId === clientId);
-        const projectIdsToDelete = projectsToDelete.map(p => p.id);
-        
-        const newTodos = todos.filter(t => !projectIdsToDelete.includes(t.projectId));
-        const newProjects = projects.filter(p => p.clientId !== clientId);
-        const newClients = clients.filter(c => c.id !== clientId);
-
-        setTodos(newTodos);
-        setProjects(newProjects);
-        setClients(newClients);
-        saveDataToCloud({ clients: newClients, projects: newProjects, todos: newTodos });
+        const projectIdsToDelete = new Set(projects.filter(p => p.clientId === clientId).map(p => p.id));
+        const ops: BatchOp[] = [
+          ...todos.filter(t => projectIdsToDelete.has(t.projectId)).map((t): BatchOp => ({ type: 'delete', name: 'todos', id: t.id })),
+          ...[...projectIdsToDelete].map((id): BatchOp => ({ type: 'delete', name: 'projects', id })),
+          { type: 'delete', name: 'clients', id: clientId },
+        ];
+        persist(firebaseService.commitOps(userId, ops));
 
         if (selectedView === clientId) {
             setSelectedView('dashboard');
@@ -281,32 +219,30 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
 
   const handleDeleteProject = (projectId: string) => {
       if (window.confirm('Sei sicuro di voler eliminare questo progetto? Verranno eliminate anche tutte le sue attività.')) {
-          const newTodos = todos.filter(t => t.projectId !== projectId);
-          const newProjects = projects.filter(p => p.id !== projectId);
-          setTodos(newTodos);
-          setProjects(newProjects);
-          saveDataToCloud({ projects: newProjects, todos: newTodos });
+          const ops: BatchOp[] = [
+            ...todos.filter(t => t.projectId === projectId).map((t): BatchOp => ({ type: 'delete', name: 'todos', id: t.id })),
+            { type: 'delete', name: 'projects', id: projectId },
+          ];
+          persist(firebaseService.commitOps(userId, ops));
       }
   };
 
   const handleDeleteTodo = (todoId: string) => {
     if (window.confirm('Sei sicuro di voler eliminare questa attività?')) {
-      setTodos(prev => {
-        const newTodos = prev.filter(t => t.id !== todoId);
-        saveDataToCloud({ todos: newTodos });
-        return newTodos;
-      });
+      persist(firebaseService.commitOps(userId, [{ type: 'delete', name: 'todos', id: todoId }]));
     }
   };
 
-  const openModal = (type: 'client' | 'project' | 'todo' | 'payment' | 'editProject', contextId: string | null = null) => {
+  const openModal = (type: FormType, contextId: string | null = null) => {
     setModalContent(type);
     setCurrentContextId(contextId);
+    setModalKey(k => k + 1); // form nuovo a ogni apertura
     setIsModalOpen(true);
   };
   
   const openAiModal = (clientId: string) => {
     setAiContextClientId(clientId);
+    setModalKey(k => k + 1);
     setIsAiModalOpen(true);
   };
 
@@ -353,149 +289,16 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     const [draggedClient] = reorderedClients.splice(dragIndex, 1);
     reorderedClients.splice(dropIndex, 0, draggedClient);
 
-    setClients(reorderedClients);
-    saveDataToCloud({ clients: reorderedClients });
+    const ops = reorderedClients
+      .map((c, index): BatchOp | null => c.order === index ? null : { type: 'update', name: 'clients', id: c.id, data: { order: index } })
+      .filter((op): op is BatchOp => op !== null);
+    persist(firebaseService.commitOps(userId, ops));
   };
   
   const handleDragEnd = (e: React.DragEvent<HTMLLIElement>) => {
     draggedClientIdRef.current = null;
     e.currentTarget.classList.remove('opacity-50', 'bg-primary');
   }
-  
-  const FormComponent = () => {
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
-    const [projectValue, setProjectValue] = useState(0);
-    const [task, setTask] = useState('');
-    const [income, setIncome] = useState(0);
-    const [dueDate, setDueDate] = useState('');
-    const [paymentAmount, setPaymentAmount] = useState(0);
-    const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
-
-    useEffect(() => {
-        setName(''); setEmail(''); setProjectValue(0); setTask('');
-        setIncome(0); setDueDate(''); setPaymentAmount(0);
-        setPaymentDate(new Date().toISOString().split('T')[0]);
-
-        if (modalContent === 'editProject' && currentContextId) {
-            const projectToEdit = projects.find(p => p.id === currentContextId);
-            if (projectToEdit) {
-                setName(projectToEdit.name);
-                setProjectValue(projectToEdit.value);
-            }
-        }
-    }, [modalContent, currentContextId, projects]);
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (modalContent === 'client' && name) {
-            handleAddClient(name, email || undefined);
-        } else if (modalContent === 'project' && name && currentContextId) {
-            handleAddProject(currentContextId, name, projectValue);
-        } else if (modalContent === 'editProject' && name && currentContextId) {
-            handleUpdateProject(currentContextId, { name, value: projectValue });
-        } else if (modalContent === 'todo' && task && currentContextId) {
-            handleAddTodo(currentContextId, task, income, dueDate || undefined);
-        } else if (modalContent === 'payment' && paymentAmount > 0 && currentContextId) {
-            handleAddPayment(currentContextId, paymentAmount, paymentDate);
-        }
-        setIsModalOpen(false);
-    };
-
-    const renderFormFields = () => {
-        switch (modalContent) {
-            case 'client':
-                return <>
-                    <input type="text" placeholder="Nome Cliente" value={name} onChange={e => setName(e.target.value)} required/>
-                    <input type="email" placeholder="Email Cliente (Opzionale)" value={email} onChange={e => setEmail(e.target.value)} />
-                </>;
-            case 'project':
-            case 'editProject':
-                return <>
-                    {modalContent === 'project' && (
-                        <select value={currentContextId || ''} onChange={(e) => setCurrentContextId(e.target.value)} required>
-                            <option value="" disabled>Seleziona Cliente</option>
-                            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                    )}
-                    <input type="text" placeholder="Nome Progetto" value={name} onChange={e => setName(e.target.value)} required/>
-                    <input type="number" placeholder="Valore Progetto (€)" value={projectValue} onChange={e => setProjectValue(Number(e.target.value))} required/>
-                </>;
-            case 'todo':
-                 return <>
-                    <input type="text" placeholder="Attività" value={task} onChange={e => setTask(e.target.value)} required/>
-                    <input type="number" placeholder="Incasso (€) - Opzionale" value={income} onChange={e => setIncome(Number(e.target.value))} />
-                    <input type="date" placeholder="Data di scadenza" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                </>;
-            case 'payment':
-                return <>
-                    <input type="number" placeholder="Importo Pagamento (€)" value={paymentAmount} onChange={e => setPaymentAmount(Number(e.target.value))} required/>
-                    <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required/>
-                </>;
-            default: return null;
-        }
-    };
-    
-    const buttonText = modalContent === 'editProject' ? 'Salva Modifiche' : 'Aggiungi';
-
-    return <form onSubmit={handleSubmit} className="space-y-4">
-        {renderFormFields()}
-        <div className="flex justify-end pt-4">
-          <button type="submit" className="btn btn-primary px-4 py-2">{buttonText}</button>
-        </div>
-    </form>
-  };
-
-  const AiFormComponent = ({ clientId, onComplete }: { clientId: string; onComplete: () => void }) => {
-      const [description, setDescription] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!description) return;
-        setLoading(true);
-        setError('');
-
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-            const schema = {
-                type: Type.OBJECT,
-                properties: {
-                    projectName: { type: Type.STRING }, projectValue: { type: Type.NUMBER }, projectNotes: { type: Type.STRING },
-                    todos: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { task: { type: Type.STRING }, income: { type: Type.NUMBER } }, required: ["task", "income"] } }
-                },
-                required: ["projectName", "projectValue", "projectNotes", "todos"]
-            };
-
-            const prompt = `Dato il brief di progetto: "${description}", genera un nome, valore, nota e 3-5 to-do comuni. Rispondi solo in JSON.`;
-            
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash', contents: prompt,
-                config: { responseMimeType: "application/json", responseSchema: schema }
-            });
-
-            const result = JSON.parse(response.text);
-            const newProject = handleAddProject(clientId, result.projectName, result.projectValue, result.projectNotes);
-            result.todos?.forEach((todo: { task: string; income: number }) => handleAddTodo(newProject.id, todo.task, todo.income));
-            onComplete();
-        } catch (err) {
-            setError('Generazione fallita. Riprova.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <textarea placeholder="Descrivi brevemente il progetto (es. 'Sito e-commerce per un negozio di abbigliamento')" value={description} onChange={e => setDescription(e.target.value)} rows={4} required disabled={loading}/>
-        {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-        <button type="submit" className="w-full bg-accent text-white py-2 rounded-lg font-semibold hover:bg-opacity-80 transition-opacity flex items-center justify-center disabled:bg-gray-400" disabled={loading}>
-            {loading ? 'Generazione...' : <><SparklesIcon className="w-5 h-5 mr-2"/> Genera Progetto</>}
-        </button>
-      </form>
-    );
-  };
 
   // --- OTTIMIZZAZIONE PERFORMANCE: CALCOLI CENTRALIZZATI ---
   
@@ -646,46 +449,25 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   }, [clients, clientPriorities]);
 
 
-  const handleUpdateProjectWorkStatus = (id: string, workStatus: WorkStatus) => setProjects(prev => {
-    const newProjects = prev.map(p => p.id === id ? { ...p, workStatus } : p);
-    saveDataToCloud({ projects: newProjects });
-    return newProjects;
-  });
+  const handleUpdateProjectWorkStatus = (id: string, workStatus: WorkStatus) =>
+    persist(firebaseService.updateEntity(userId, 'projects', id, { workStatus }));
 
-  const handleToggleTodo = (id: string, completed: boolean) => setTodos(prev => {
-    const newTodos = prev.map(t => t.id === id ? { ...t, completed } : t);
-    saveDataToCloud({ todos: newTodos });
-    return newTodos;
-  });
+  const handleToggleTodo = (id: string, completed: boolean) =>
+    persist(firebaseService.updateEntity(userId, 'todos', id, { completed }));
 
-  const handleUpdateProjectNotes = (id: string, notes: string) => setProjects(prev => {
-    const newProjects = prev.map(p => p.id === id ? { ...p, notes } : p);
-    saveDataToCloud({ projects: newProjects });
-    return newProjects;
-  });
-  
-  const handleUpdateProjectPriority = (id: string, priority: ProjectPriority) => setProjects(prev => {
-    const newProjects = prev.map(p => p.id === id ? { ...p, priority } : p);
-    saveDataToCloud({ projects: newProjects });
-    return newProjects;
-  });
+  const handleUpdateProjectNotes = (id: string, notes: string) =>
+    persist(firebaseService.updateEntity(userId, 'projects', id, { notes }));
+
+  const handleUpdateProjectPriority = (id: string, priority: ProjectPriority) =>
+    persist(firebaseService.updateEntity(userId, 'projects', id, { priority }));
 
   const handleUpdateProjectPaymentStatus = (id: string, paymentStatus: PaymentStatus) => {
-    setProjects(prev => {
-      const newProjects = prev.map(p => {
-        if (p.id === id) {
-          const { paidAt, ...rest } = p;
-          const updatedProject: Project = { ...rest, paymentStatus, };
-          if (paymentStatus === PaymentStatus.Pagato) {
-            updatedProject.paidAt = p.paidAt || new Date().toISOString();
-          }
-          return updatedProject;
-        }
-        return p;
-      });
-      saveDataToCloud({ projects: newProjects });
-      return newProjects;
-    });
+    const project = projects.find(p => p.id === id);
+    if (!project) return;
+    persist(firebaseService.updateEntity(userId, 'projects', id, {
+      paymentStatus,
+      paidAt: paymentStatus === PaymentStatus.Pagato ? (project.paidAt || new Date().toISOString()) : deleteField(),
+    }));
   };
 
   const selectedClient = useMemo(() => clients.find(c => c.id === selectedView), [clients, selectedView]);
@@ -723,6 +505,18 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
       } else {
           openModal('client')
       }
+  }
+
+  if (loadError) {
+    return <FullScreenMessage>
+      <p className="font-semibold">Impossibile leggere i dati.</p>
+      <p className="text-sm text-muted-foreground max-w-md">{loadError}</p>
+      <button onClick={onLogout} className="btn btn-primary px-4 py-2">Esci</button>
+    </FullScreenMessage>;
+  }
+
+  if (!data) {
+    return <FullScreenMessage>Caricamento dati...</FullScreenMessage>;
   }
 
   return (
@@ -803,14 +597,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         />}
         {selectedView === 'tasks' && <TaskView todos={todos} projects={projects} clients={clients} onToggleTodo={handleToggleTodo} onDeleteTodo={handleDeleteTodo} onReorderTodos={handleReorderTodos}/>}
         {selectedView === 'calendar' && <CalendarView todos={todos} projects={projects} clients={clients}/>}
-        {selectedView === 'settings' && <SettingsView 
-            userId={userId} 
-            onImportSuccess={(data) => {
-                setClients(data.clients);
-                setProjects(data.projects);
-                setTodos(data.todos);
-            }}
-        />}
+        {selectedView === 'settings' && <SettingsView userId={userId} />}
         {selectedClient && (
             <ClientView 
                 client={selectedClient} 
@@ -841,30 +628,56 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
         <PlusIcon className="w-7 h-7" />
       </button>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalTitle()}><FormComponent /></Modal>
-      <Modal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} title="Crea Progetto con AI">{aiContextClientId && <AiFormComponent clientId={aiContextClientId} onComplete={() => setIsAiModalOpen(false)} />}</Modal>
+      {saveError && (
+        <div role="alert" className="fixed bottom-24 left-4 right-4 md:left-auto md:max-w-md z-50 flex items-start gap-3 p-4 rounded-lg shadow-lg bg-red-600 text-white">
+          <p className="text-sm flex-1">{saveError}</p>
+          <button onClick={() => setSaveError(null)} aria-label="Chiudi avviso"><XIcon className="w-5 h-5" /></button>
+        </div>
+      )}
+
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalTitle()}>
+        {modalContent && (
+          <EntityForm
+            key={modalKey}
+            type={modalContent}
+            contextId={currentContextId}
+            clients={clients}
+            projects={projects}
+            onAddClient={handleAddClient}
+            onAddProject={handleAddProject}
+            onUpdateProject={handleUpdateProject}
+            onAddTodo={handleAddTodo}
+            onAddPayment={handleAddPayment}
+            onDone={() => setIsModalOpen(false)}
+          />
+        )}
+      </Modal>
+      <Modal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} title="Crea Progetto con AI">
+        {aiContextClientId && <AiProjectForm key={modalKey} onGenerated={handleAiGenerated(aiContextClientId)} onComplete={() => setIsAiModalOpen(false)} />}
+      </Modal>
     </div>
   );
 };
 
 export default function App() {
-  const [authState, setAuthState] = useState<{ state: AppState; user: User | null; data: AppData | null }>({ state: 'loading', user: null, data: null });
+  const [authState, setAuthState] = useState<{ state: AppState; user: User | null; error?: string }>({ state: 'loading', user: null });
   const [authView, setAuthView] = useState<'login' | 'setup'>('login');
 
   useEffect(() => {
     const unsubscribe = firebaseService.onAuthChange(async (user) => {
-      if (user) {
-        setAuthState(prev => ({ ...prev, state: 'loading' }));
-        try {
-            const userData = await firebaseService.getData(user.uid);
-            setAuthState({ state: 'authenticated', user, data: userData });
-        } catch (error) {
-            console.error("Errore nel caricamento dei dati:", error);
-            await firebaseService.logout();
-            setAuthState({ state: 'unauthenticated', user: null, data: null });
-        }
-      } else {
-        setAuthState({ state: 'unauthenticated', user: null, data: null });
+      if (!user) {
+        setAuthState({ state: 'unauthenticated', user: null });
+        return;
+      }
+      setAuthState({ state: 'loading', user: null });
+      try {
+        // Converte i dati dal vecchio formato, se necessario (operazione non distruttiva)
+        await firebaseService.ensureMigrated(user.uid);
+        setAuthState({ state: 'authenticated', user });
+      } catch (error) {
+        // Nessun logout automatico e nessuna scrittura: si mostra l'errore e basta.
+        console.error("Errore nella preparazione dei dati:", error);
+        setAuthState({ state: 'error', user, error: error instanceof Error ? error.message : String(error) });
       }
     });
     return () => unsubscribe();
@@ -873,20 +686,25 @@ export default function App() {
   const handleLogout = async () => {
     await firebaseService.logout();
   };
-  
+
   switch (authState.state) {
     case 'loading':
-      return <div className="flex items-center justify-center h-screen bg-background text-foreground">Caricamento in corso...</div>;
+      return <FullScreenMessage>Caricamento in corso...</FullScreenMessage>;
+    case 'error':
+      return <FullScreenMessage>
+        <p className="font-semibold">Impossibile preparare i dati del tuo account.</p>
+        <p className="text-sm text-muted-foreground max-w-md">{authState.error}</p>
+        <p className="text-sm text-muted-foreground max-w-md">I tuoi dati non sono stati modificati. Se l'errore parla di permessi, controlla che le regole Firestore siano aggiornate.</p>
+        <div className="flex gap-2">
+          <button onClick={() => window.location.reload()} className="btn btn-primary px-4 py-2">Riprova</button>
+          <button onClick={handleLogout} className="btn px-4 py-2 border">Esci</button>
+        </div>
+      </FullScreenMessage>;
     case 'unauthenticated':
-      return authView === 'login' 
+      return authView === 'login'
         ? <LoginScreen onNavigateToRegister={() => setAuthView('setup')} />
         : <SetupScreen onNavigateToLogin={() => setAuthView('login')} />;
     case 'authenticated':
-      if (!authState.data || !authState.user) {
-        return <div className="flex items-center justify-center h-screen bg-background text-foreground">Caricamento dati utente...</div>;
-      }
-      return <MainApp onLogout={handleLogout} initialData={authState.data} userId={authState.user.uid} />;
-    default:
-      return <LoginScreen onNavigateToRegister={() => setAuthView('setup')} />;
+      return <MainApp key={authState.user!.uid} onLogout={handleLogout} userId={authState.user!.uid} />;
   }
 }

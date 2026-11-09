@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// Regole di sicurezza Firestore per Progetta.
+// Vanno pubblicate nella console Firebase (Firestore Database > Regole) oppure con
+// `firebase deploy --only firestore:rules`.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+
+      // Il documento utente accetta solo scritture del nuovo formato (schemaVersion 2).
+      // Questo blocca una vecchia versione dell'app, rimasta aperta in una scheda,
+      // che altrimenti sovrascriverebbe il documento con i vecchi array.
+      allow create, update: if isOwner(userId)
+                            && request.resource.data.schemaVersion == 2;
+      allow delete: if false;
+
+      // clients, projects, todos (e le collezioni future)
+      match /{collection}/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

@@ -1,24 +1,16 @@
 import React from 'react';
 import * as firebaseService from '../services/firebaseService';
 import { DownloadIcon, UploadIcon } from './icons';
-import { Client, Project, Todo } from '../types';
-
-type AppData = {
-  clients: Client[];
-  projects: Project[];
-  todos: Todo[];
-};
 
 interface SettingsViewProps {
   userId: string;
-  onImportSuccess: (data: AppData) => void;
 }
 
-const SettingsView: React.FC<SettingsViewProps> = ({ userId, onImportSuccess }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({ userId }) => {
 
   const handleExportData = async () => {
     try {
-        const currentCloudData = await firebaseService.getData(userId);
+        const currentCloudData = await firebaseService.exportData(userId);
         if (!currentCloudData || currentCloudData.clients.length === 0 && currentCloudData.projects.length === 0) {
             alert("Non ci sono dati da esportare.");
             return;
@@ -56,7 +48,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userId, onImportSuccess }) 
                   
                   const importedData = JSON.parse(content);
 
-                  if (!('clients' in importedData && 'projects' in importedData && 'todos' in importedData)) {
+                  if (!(importedData && Array.isArray(importedData.clients) && Array.isArray(importedData.projects) && Array.isArray(importedData.todos))) {
                       throw new Error("Il file di backup non è valido o è corrotto.");
                   }
 
@@ -65,8 +57,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userId, onImportSuccess }) 
                   );
 
                   if (confirmation) {
-                      await firebaseService.saveData(userId, importedData);
-                      onImportSuccess(importedData);
+                      // L'interfaccia si aggiorna da sola tramite gli snapshot in tempo reale
+                      await firebaseService.importData(userId, importedData);
                       alert("Dati importati e salvati sul cloud con successo!");
                   }
               } catch (error) {
