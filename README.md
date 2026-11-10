@@ -49,8 +49,8 @@ La copia non cancella nulla e può essere ripetuta senza duplicati.
 
 ### Pubblicazione automatica
 
-Ogni Merge su `main` pubblica il sito da solo (`.github/workflows/deploy.yml`, scheda *Actions* su GitHub).
-Regole Firestore e connettore Claude restano manuali: si toccano di rado.
+Ogni Merge su `main` pubblica tutto da solo: sito, connettore Claude e regole Firestore
+(`.github/workflows/deploy.yml`, scheda *Actions* su GitHub). Non serve la shell.
 
 ### Pubblicare un aggiornamento che tocca i dati
 
