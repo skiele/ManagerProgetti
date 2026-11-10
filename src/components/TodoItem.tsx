@@ -1,8 +1,8 @@
 
 import React from 'react';
 import { Todo } from '../types';
-import { TrashIcon, GripVerticalIcon } from './icons';
-import { formatCurrency } from '../utils/formatting';
+import { TrashIcon, GripVerticalIcon, CalendarIcon } from './icons';
+import { formatCurrency, googleCalendarLink } from '../utils/formatting';
 
 interface TodoItemProps {
   todo: Todo;
@@ -53,6 +53,13 @@ const TodoItem: React.FC<TodoItemProps> = ({
       <div className="flex items-center flex-shrink-0 ml-4">
          {todo.dueDate && <span className={`text-[13px] mr-4 tabular-nums ${new Date(todo.dueDate) < new Date(new Date().setHours(0,0,0,0)) && !todo.completed ? 'text-signal font-extrabold' : 'font-semibold'}`}>{new Date(todo.dueDate).toLocaleDateString('it-IT')}</span>}
         {todo.income > 0 && <span className="font-extrabold text-foreground mr-4">{formatCurrency(todo.income)}</span>}
+        {todo.dueDate && !todo.completed && (
+          <a href={googleCalendarLink(todo.task, todo.dueDate, context)} target="_blank" rel="noopener noreferrer"
+            className="text-muted-foreground hover:text-foreground mr-3 md:opacity-0 md:group-hover:opacity-100"
+            aria-label={`Aggiungi a Google Calendar: ${todo.task}`} title="Aggiungi a Google Calendar">
+            <CalendarIcon className="w-4 h-4" />
+          </a>
+        )}
         <button onClick={() => onDelete(todo.id)} className="text-muted-foreground hover:text-destructive md:opacity-0 md:group-hover:opacity-100" aria-label={`Elimina task ${todo.task}`}>
             <TrashIcon className="w-4 h-4" />
         </button>

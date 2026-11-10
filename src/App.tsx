@@ -161,8 +161,10 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
     payments: [],
   });
 
-  const handleAddProject = (clientId: string, name: string, value: number) => {
-    persist(firebaseService.saveEntity(userId, 'projects', buildProject(clientId, name, value)));
+  const handleAddProject = (clientId: string, name: string, value: number, isOpportunity = false) => {
+    const project = buildProject(clientId, name, value);
+    if (isOpportunity) project.workStatus = WorkStatus.Opportunita;
+    persist(firebaseService.saveEntity(userId, 'projects', project));
   };
 
   const handleUpdateProject = (projectId: string, data: { name: string; value: number }) => {
@@ -327,12 +329,12 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
     const ops: BatchOp[] = [{ type: 'update', name: 'quotes', id: quote.id, data: { status } }];
     const projectUpdate: Partial<Project> = {};
 
-    if (project && status === QuoteStatus.Inviato && project.workStatus === WorkStatus.PreventivoDaInviare) {
+    if (project && status === QuoteStatus.Inviato && (project.workStatus === WorkStatus.PreventivoDaInviare || project.workStatus === WorkStatus.Opportunita)) {
       projectUpdate.workStatus = WorkStatus.PreventivoInviato;
     }
     if (project && status === QuoteStatus.Accettato) {
       const { subtotal } = quoteTotals(quote);
-      const inQuotePhase = project.workStatus === WorkStatus.PreventivoDaInviare || project.workStatus === WorkStatus.PreventivoInviato;
+      const inQuotePhase = project.workStatus === WorkStatus.Opportunita || project.workStatus === WorkStatus.PreventivoDaInviare || project.workStatus === WorkStatus.PreventivoInviato;
       const changes = [
         project.value !== subtotal ? `valore del progetto da ${formatCurrency(project.value)} a ${formatCurrency(subtotal)}` : null,
         inQuotePhase ? 'stato di lavorazione a "In lavorazione"' : null,
@@ -463,7 +465,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
             }
         });
 
-        if (p.workStatus === WorkStatus.Annullato) return;
+        if (p.workStatus === WorkStatus.Annullato || p.workStatus === WorkStatus.Opportunita) return;
 
         const projectTotal = allProjectTotals.get(p.id) || 0;
         const totalPaid = p.payments?.reduce((sum, payment) => sum + payment.amount, 0) || 0;
@@ -499,7 +501,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
             }
         });
 
-        if (p.workStatus === WorkStatus.Annullato) return;
+        if (p.workStatus === WorkStatus.Annullato || p.workStatus === WorkStatus.Opportunita) return;
         
         const total = allProjectTotals.get(p.id) || 0;
         const paid = p.payments?.reduce((sum, payment) => sum + payment.amount, 0) || 0;
@@ -539,7 +541,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
 
     projects.forEach(project => {
       const isFinished = project.workStatus === WorkStatus.Consegnato && project.paymentStatus === PaymentStatus.Pagato;
-      const isActive = project.workStatus !== WorkStatus.Annullato && !isFinished;
+      const isActive = project.workStatus !== WorkStatus.Annullato && project.workStatus !== WorkStatus.Opportunita && !isFinished;
       
       if (isActive) {
         const currentPriority = priorities.get(project.clientId);

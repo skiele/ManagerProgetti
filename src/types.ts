@@ -1,5 +1,7 @@
 
 export enum WorkStatus {
+  // Trattativa incerta: non entra in incassi, preventivi e grafici finché non diventa concreta
+  Opportunita = 'opportunità',
   PreventivoDaInviare = 'preventivo da inviare',
   PreventivoInviato = 'preventivo inviato',
   InLavorazione = 'in lavorazione',

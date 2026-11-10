@@ -4,6 +4,7 @@ import { DownloadIcon, UploadIcon } from './icons';
 import { BusinessProfile } from '../types';
 import { DEFAULT_TAX_NOTE } from '../utils/quotes';
 import ClaudeConnector from './ClaudeConnector';
+import CalendarFeed from './CalendarFeed';
 import PageHeader from './PageHeader';
 
 interface SettingsViewProps {
@@ -123,6 +124,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userId, profile, onSaveProf
             Compaiono nell'intestazione e in calce di ogni preventivo. La dicitura proposta è quella del regime forfettario: verificala con il tuo commercialista.
           </p>
           <ProfileForm profile={profile} onSave={onSaveProfile} />
+        </div>
+
+        <div>
+          <h2 className="text-xl font-extrabold tracking-[-0.02em] pb-2 mb-3 border-b-2 border-foreground">Google Calendar</h2>
+          <CalendarFeed userId={userId} />
         </div>
 
         <div>

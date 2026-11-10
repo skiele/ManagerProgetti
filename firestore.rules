@@ -32,6 +32,15 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Collegamenti del calendario (sola lettura delle scadenze): stessa logica di mcpTokens
+    match /calendarTokens/{tokenHash} {
+      allow read, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.keys().hasOnly(['uid', 'label', 'createdAt']);
+      allow update: if false;
+    }
+
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }

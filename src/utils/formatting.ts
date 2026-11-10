@@ -8,3 +8,13 @@ export const formatCurrency = (amount: number): string => euroFormatter.format(a
 // Per i numeri grandi a colpo d'occhio: niente ",00" quando non ci sono centesimi (9.800 €)
 export const formatCurrencyShort = (amount: number): string =>
   Number.isInteger(amount) ? formatCurrency(amount).replace(/,00(?=\s?€)/, '') : formatCurrency(amount);
+
+// Link "Aggiungi a Google Calendar" per un evento di un giorno intero (nessun accesso all'account)
+export const googleCalendarLink = (title: string, isoDate: string, details?: string): string => {
+  const start = isoDate.slice(0, 10);
+  const next = new Date(`${start}T12:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  const dates = `${start.replace(/-/g, '')}/${next.toISOString().slice(0, 10).replace(/-/g, '')}`;
+  const params = new URLSearchParams({ action: 'TEMPLATE', text: title, dates, ...(details ? { details } : {}) });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+};
