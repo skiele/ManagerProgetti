@@ -735,7 +735,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
                 persist={persist}
             />
         )}
-        {selectedView === 'projects' && <ProjectsView projects={projects} clients={clients} projectTotals={allProjectTotals} onOpenProject={openProject} />}
+        {selectedView === 'projects' && <ProjectsView projects={projects} clients={clients} projectTotals={allProjectTotals} todos={todos} onOpenProject={openProject} />}
         {selectedProject && (
             <ProjectDetail
                 key={selectedProject.id}
@@ -785,6 +785,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
                 client={selectedClient}
                 projects={projects.filter(p => p.clientId === selectedClient.id)}
                 projectTotals={allProjectTotals}
+                todos={todos}
                 onOpenProject={openProject}
                 onAiAddProject={openAiModal}
                 onDeleteClient={handleDeleteClient}
