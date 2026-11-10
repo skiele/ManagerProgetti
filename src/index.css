@@ -130,3 +130,24 @@
 .quote-doc .qd-grand td { font-size: 13pt; font-weight: 700; border-top: 1pt solid #111; }
 .quote-doc .qd-sign { width: 45%; margin-left: auto; margin-top: 36pt; break-inside: avoid; }
 .quote-doc .qd-line { border-bottom: 0.75pt solid #111; height: 28pt; }
+
+/* ---------- Storyboard stampabile ---------- */
+.sb-print { font-family: Archivo, 'Helvetica Neue', Arial, sans-serif; color: #000; background: #fff; font-size: 9pt; line-height: 1.35; }
+.sb-print p { margin: 0; }
+.sb-print-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3pt solid #000; padding-bottom: 6pt; margin-bottom: 10pt; }
+.sb-print h1 { margin: 2pt 0 0; font-size: 22pt; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.sb-print .sb-over { font-size: 7pt; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+.sb-print .sb-scene { margin-bottom: 10pt; }
+.sb-print h2 { font-size: 11pt; font-weight: 800; margin: 0 0 6pt; padding-bottom: 3pt; border-bottom: 1.5pt solid #000; break-after: avoid; }
+.sb-print .sb-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9pt 10pt; }
+.sb-print .sb-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sb-print .sb-frame { break-inside: avoid; }
+.sb-print .sb-img { position: relative; border: 1.5pt solid #000; background: #fff; overflow: hidden; margin-bottom: 4pt; }
+.sb-print .sb-img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sb-print .sb-code { font-size: 8pt; margin-bottom: 2pt; }
+.sb-print .sb-code strong { font-size: 10pt; margin-right: 4pt; }
+.sb-print .sb-audio { color: #444; font-style: italic; margin-top: 2pt; }
+.sb-print .sb-table { width: 100%; border-collapse: collapse; }
+.sb-print .sb-table th { text-align: left; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1pt solid #000; padding: 3pt 4pt; }
+.sb-print .sb-table td { border-bottom: 0.5pt solid #bbb; padding: 4pt; vertical-align: top; }
+.sb-print .sb-table tr { break-inside: avoid; }

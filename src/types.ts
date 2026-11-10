@@ -138,10 +138,58 @@ export interface ClaudeActivity {
   summary: string;
 }
 
+// --- Storyboard / shot list ---
+
+export type AspectRatio = '16:9' | '2.39:1' | '4:3' | '1:1' | '4:5' | '9:16';
+
+export const SHOT_SIZES = ['EWS', 'WS', 'MS', 'MCU', 'CU', 'ECU', 'INS'] as const;
+export type ShotSize = typeof SHOT_SIZES[number];
+
+export const SHOT_MOVES = ['fissa', 'panoramica', 'tilt', 'carrello', 'a mano', 'gimbal', 'drone', 'zoom'] as const;
+export type ShotMove = typeof SHOT_MOVES[number];
+
+// Una storyboard per progetto (o più, se servono versioni): users/{uid}/shotlists/{id}
+export interface Shotlist {
+  id: string;
+  projectId: string;
+  title: string;
+  aspect: AspectRatio;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Un'inquadratura: users/{uid}/shots/{id}. Il codice (1A, 1B, 2A…) si calcola da scena + ordine.
+// L'immagine sta a parte in users/{uid}/shotImages/{id dell'inquadratura}, per non appesantire gli elenchi.
+export interface Shot {
+  id: string;
+  shotlistId: string;
+  projectId: string;
+  order: number;
+  scene: number;
+  sceneTitle?: string;     // intestazione della scena (letta dalla prima inquadratura della scena)
+  size?: ShotSize;
+  move?: ShotMove;
+  lens?: string;           // es. "35mm"
+  description: string;     // azione / cosa si vede
+  audio?: string;          // dialoghi, suono, musica
+  duration?: number;       // secondi (facoltativo)
+  notes?: string;
+  done: boolean;           // girata
+  hasImage: boolean;
+}
+
+export interface ShotImage {
+  id: string;              // = id dell'inquadratura
+  shotlistId: string;
+  dataUrl: string;         // JPEG ridimensionato nel browser (max ~1280 px)
+}
+
 export type AppData = {
   clients: Client[];
   projects: Project[];
   todos: Todo[];
   quotes: Quote[];
   documents: TextDocument[];
+  shotlists: Shotlist[];
+  shots: Shot[];
 };

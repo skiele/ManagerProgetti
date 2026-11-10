@@ -11,10 +11,11 @@ import { registerTools } from './tools.js';
 initializeApp();
 const db = getFirestore();
 
-const INSTRUCTIONS = `Progetta è il gestionale di un videomaker in regime forfettario: clienti, progetti, attività, pagamenti, preventivi e documenti di testo (soggetti, trattamenti, sceneggiature, note in Markdown).
+const INSTRUCTIONS = `Progetta è il gestionale di un filmmaker indipendente in regime forfettario: clienti, progetti, attività, pagamenti, preventivi, documenti di testo (soggetti, trattamenti, sceneggiature, note in Markdown) e storyboard (inquadrature numerate per scena: 1A, 1B, 2A…).
 - Leggi prima di scrivere: usa read_document e passa expectedRevision alle modifiche.
 - Per ritocchi usa edit_document (sostituzioni puntuali), per riscritture complete update_document.
 - I preventivi creati sono bozze: l'utente li invia e li accetta dall'app. Niente IVA (forfettario).
+- Per una storyboard da un testo: create_storyboard, poi add_shots con le inquadrature in ordine. Non puoi disegnare le immagini dei fotogrammi.
 - Non puoi eliminare dati né registrare pagamenti.`;
 
 const sha256 = text => createHash('sha256').update(text).digest('hex');

@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { deleteField } from 'firebase/firestore';
 import { User } from 'firebase/auth';
-import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment, AppData, Quote, QuoteStatus, BusinessProfile, TextDocument, DocumentKind } from './types';
+import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment, AppData, Quote, QuoteStatus, BusinessProfile, TextDocument, DocumentKind, Shotlist } from './types';
 import { CalendarIcon, ChartBarIcon, PlusIcon, UsersIcon, LogOutIcon, SunIcon, MoonIcon, CogIcon, MenuIcon, XIcon, ListTodoIcon, BriefcaseIcon, FileTextIcon } from './components/icons';
 import Modal from './components/Modal';
 import Wordmark from './components/Wordmark';
@@ -19,6 +19,8 @@ import ProjectDetail from './components/ProjectDetail';
 import QuotesTab from './components/QuotesTab';
 import DocumentEditor from './components/DocumentEditor';
 import DocumentsList from './components/DocumentsList';
+import StoryboardList from './components/StoryboardList';
+import StoryboardView from './components/StoryboardView';
 import { quoteTotals } from './utils/quotes';
 import { formatCurrency } from './utils/formatting';
 import EntityForm, { FormType } from './components/EntityForm';
@@ -68,6 +70,8 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
   const todos = data?.todos ?? [];
   const quotes = data?.quotes ?? [];
   const documents = data?.documents ?? [];
+  const shotlists = data?.shotlists ?? [];
+  const shots = data?.shots ?? [];
 
   const draggedClientIdRef = useRef<string | null>(null);
   const navRef = useRef<HTMLElement>(null);
@@ -235,6 +239,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
           ...todos.filter(t => projectIdsToDelete.has(t.projectId)).map((t): BatchOp => ({ type: 'delete', name: 'todos', id: t.id })),
           ...quotes.filter(q => projectIdsToDelete.has(q.projectId)).map((q): BatchOp => ({ type: 'delete', name: 'quotes', id: q.id })),
           ...documents.filter(d => d.projectId && projectIdsToDelete.has(d.projectId)).map((d): BatchOp => ({ type: 'update', name: 'documents', id: d.id, data: { projectId: null } })),
+          ...storyboardDeleteOps(shotlists.filter(sl => projectIdsToDelete.has(sl.projectId))),
           ...[...projectIdsToDelete].map((id): BatchOp => ({ type: 'delete', name: 'projects', id })),
           { type: 'delete', name: 'clients', id: clientId },
         ];
@@ -252,6 +257,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
             ...todos.filter(t => t.projectId === projectId).map((t): BatchOp => ({ type: 'delete', name: 'todos', id: t.id })),
             ...quotes.filter(q => q.projectId === projectId).map((q): BatchOp => ({ type: 'delete', name: 'quotes', id: q.id })),
             ...documents.filter(d => d.projectId === projectId).map((d): BatchOp => ({ type: 'update', name: 'documents', id: d.id, data: { projectId: null } })),
+            ...storyboardDeleteOps(shotlists.filter(sl => sl.projectId === projectId)),
             { type: 'delete', name: 'projects', id: projectId },
           ];
           persist(firebaseService.commitOps(userId, ops));
@@ -260,6 +266,28 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
             setSelectedView(project ? project.clientId : 'projects');
           }
       }
+  };
+
+  // --- Storyboard ---
+
+  // Inquadrature e storyboard da eliminare; le immagini (collezione a parte) si eliminano dopo
+  const storyboardDeleteOps = (lists: Shotlist[]): BatchOp[] => {
+    const ids = new Set(lists.map(l => l.id));
+    lists.forEach(l => firebaseService.listShotImageIds(userId, l.id)
+      .then(imageIds => imageIds.length && firebaseService.commitOps(userId, imageIds.slice(0, 450).map((id): BatchOp => ({ type: 'delete', name: 'shotImages', id }))))
+      .catch(e => console.error('Pulizia immagini storyboard:', e)));
+    return [
+      ...shots.filter(s => ids.has(s.shotlistId)).map((s): BatchOp => ({ type: 'delete', name: 'shots', id: s.id })),
+      ...lists.map((l): BatchOp => ({ type: 'delete', name: 'shotlists', id: l.id })),
+    ];
+  };
+
+  const handleCreateStoryboard = (projectId: string) => {
+    const now = new Date().toISOString();
+    const existing = shotlists.filter(sl => sl.projectId === projectId).length;
+    const shotlist: Shotlist = { id: crypto.randomUUID(), projectId, title: existing ? `Storyboard ${existing + 1}` : 'Storyboard', aspect: '16:9', createdAt: now, updatedAt: now };
+    persist(firebaseService.saveEntity(userId, 'shotlists', shotlist));
+    handleSelectView(`board:${shotlist.id}`);
   };
 
   // --- Documenti ---
@@ -573,6 +601,9 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
     () => selectedView.startsWith('doc:') ? documents.find(d => d.id === selectedView.slice('doc:'.length)) : undefined,
     [documents, selectedView]);
   const openDocument = (id: string) => handleSelectView(`doc:${id}`);
+  const selectedShotlist = useMemo(
+    () => selectedView.startsWith('board:') ? shotlists.find(l => l.id === selectedView.slice('board:'.length)) : undefined,
+    [shotlists, selectedView]);
   
   // Pallino accanto al cliente: arancio = priorità alta, bianco = media, grigio = bassa o nessun progetto attivo
   const priorityDotClass = (clientId: string): string => {
@@ -585,7 +616,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
 
   const navItems: { view: string; label: string; isActive: (v: string) => boolean }[] = [
     { view: 'dashboard', label: 'Dashboard', isActive: v => v === 'dashboard' },
-    { view: 'projects', label: 'Progetti', isActive: v => v === 'projects' || v.startsWith('project:') },
+    { view: 'projects', label: 'Progetti', isActive: v => v === 'projects' || v.startsWith('project:') || v.startsWith('board:') },
     { view: 'documents', label: 'Documenti', isActive: v => v === 'documents' || v.startsWith('doc:') },
     { view: 'tasks', label: 'Attività', isActive: v => v === 'tasks' },
     { view: 'calendar', label: 'Calendario', isActive: v => v === 'calendar' },
@@ -735,6 +766,19 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
                 persist={persist}
             />
         )}
+        {selectedShotlist && (
+            <StoryboardView
+                key={selectedShotlist.id}
+                userId={userId}
+                shotlist={selectedShotlist}
+                shots={shots.filter(s => s.shotlistId === selectedShotlist.id)}
+                project={projects.find(p => p.id === selectedShotlist.projectId)}
+                client={clients.find(c => c.id === projects.find(p => p.id === selectedShotlist.projectId)?.clientId)}
+                persist={persist}
+                onBack={() => handleSelectView(`project:${selectedShotlist.projectId}`)}
+                onDeleted={() => handleSelectView(`project:${selectedShotlist.projectId}`)}
+            />
+        )}
         {selectedView === 'projects' && <ProjectsView projects={projects} clients={clients} projectTotals={allProjectTotals} todos={todos} onOpenProject={openProject} />}
         {selectedProject && (
             <ProjectDetail
@@ -756,6 +800,15 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
                 onDeletePayment={handleDeletePayment}
                 quotesCount={quotes.filter(q => q.projectId === selectedProject.id).length}
                 documentsCount={documents.filter(d => d.projectId === selectedProject.id).length}
+                storyboardCount={shotlists.filter(l => l.projectId === selectedProject.id).length}
+                storyboardTab={
+                    <StoryboardList
+                        shotlists={shotlists.filter(l => l.projectId === selectedProject.id)}
+                        shots={shots}
+                        onOpen={id => handleSelectView(`board:${id}`)}
+                        onCreate={() => handleCreateStoryboard(selectedProject.id)}
+                    />
+                }
                 documentsTab={
                     <DocumentsList
                         documents={documents.filter(d => d.projectId === selectedProject.id)}
@@ -793,7 +846,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
         )}
       </main>
       
-      {!selectedDocument && <button 
+      {!selectedDocument && !selectedShotlist && <button 
         onClick={fab.action}
         className="fixed bottom-6 right-6 w-14 h-14 bg-signal text-black hover:bg-accent-hover flex items-center justify-center"
         aria-label={fab.label}
