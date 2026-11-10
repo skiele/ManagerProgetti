@@ -47,6 +47,11 @@ Ogni modifica a un documento salva prima la versione precedente; ogni azione fin
 Al primo accesso con la nuova versione i dati vengono copiati automaticamente dal vecchio formato.
 La copia non cancella nulla e può essere ripetuta senza duplicati.
 
+### Pubblicazione automatica
+
+Ogni Merge su `main` pubblica il sito da solo (`.github/workflows/deploy.yml`, scheda *Actions* su GitHub).
+Regole Firestore e connettore Claude restano manuali: si toccano di rado.
+
 ### Pubblicare un aggiornamento che tocca i dati
 
 1. Dall'app attuale: **Impostazioni → Esporta Backup**.

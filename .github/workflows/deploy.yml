@@ -1,0 +1,45 @@
+# Pubblica l'app su Firebase Hosting (https://progetta-800ca.web.app)
+# ogni volta che il codice arriva sul branch main, ad esempio con il Merge di una pull request.
+# Si può anche avviare a mano: GitHub → Actions → "Pubblica l'app" → Run workflow.
+#
+# Richiede il secret FIREBASE_SERVICE_ACCOUNT (Settings → Secrets and variables → Actions):
+# la chiave JSON di un account di servizio Google Cloud con i ruoli
+# Firebase Hosting Admin, Cloud Run Viewer, Cloud Functions Viewer e API Keys Viewer.
+#
+# Pubblica solo il sito. Regole di sicurezza e connettore Claude cambiano di rado
+# e restano da pubblicare a mano (vedi README).
+
+name: Pubblica l'app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-hosting
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Installa le dipendenze
+        run: npm install --no-audit --no-fund
+
+      - name: Accedi a Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      # La compilazione (npm run build) la esegue firebase.json prima della pubblicazione
+      - name: Pubblica su Firebase Hosting
+        run: npx --yes firebase-tools@15 deploy --only hosting --project progetta-800ca --non-interactive
