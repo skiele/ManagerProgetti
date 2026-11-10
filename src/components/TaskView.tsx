@@ -2,6 +2,7 @@
 import React, { useMemo, useRef } from 'react';
 import { Todo, Project, Client, WorkStatus, ProjectPriority } from '../types';
 import TodoItem from './TodoItem';
+import PageHeader from './PageHeader';
 
 interface TaskViewProps {
     todos: Todo[];
@@ -156,13 +157,11 @@ const TaskView: React.FC<TaskViewProps> = ({ todos, projects, clients, onToggleT
         if (list.length === 0) return null;
         return (
             <div className="mb-8">
-                <h3 className={`text-lg font-bold mb-4 flex items-center ${colorClass}`}>
-                    {title} 
-                    <span className="ml-2 text-xs bg-muted px-2 py-0.5 rounded-full text-foreground font-normal border">
-                        {list.length}
-                    </span>
+                <h3 className="flex items-baseline justify-between pb-2 mb-3 border-b-2 border-foreground">
+                    <span className={`text-xl font-extrabold tracking-[-0.02em] ${colorClass}`}>{title}</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.12em]">{list.length}</span>
                 </h3>
-                <div className="space-y-2">
+                <div>
                     {list.map(todo => (
                         <TodoItem 
                             key={todo.id} 
@@ -182,18 +181,13 @@ const TaskView: React.FC<TaskViewProps> = ({ todos, projects, clients, onToggleT
     };
 
     return (
-        <div className="max-w-4xl mx-auto">
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold">Le tue Attività</h1>
-                <p className="text-muted-foreground mt-1">
-                    Panoramica attività. Ordinate automaticamente per priorità progetto, ma puoi trascinarle per riordinarle manualmente.
-                </p>
-            </div>
+        <div className="max-w-[1120px]">
+            <PageHeader overline="Da fare" title="Attività" subtitle="Ordinate per priorità del progetto. Trascinale per cambiare l'ordine." />
 
-            {renderSection('Scaduti', groupedTodos.overdue, 'overdue', 'text-red-500')}
-            {renderSection('Oggi', groupedTodos.today, 'today', 'text-green-500')}
-            {renderSection('Prossimi', groupedTodos.upcoming, 'upcoming', 'text-blue-500')}
-            {renderSection('Senza Scadenza', groupedTodos.noDate, 'noDate', 'text-muted-foreground')}
+            {renderSection('Scaduti', groupedTodos.overdue, 'overdue', 'text-signal')}
+            {renderSection('Oggi', groupedTodos.today, 'today')}
+            {renderSection('Prossimi', groupedTodos.upcoming, 'upcoming')}
+            {renderSection('Senza scadenza', groupedTodos.noDate, 'noDate')}
         </div>
     );
 };

@@ -41,7 +41,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ todos, projects, clients })
   });
 
   const TodoChip: React.FC<{ todo: Todo }> = ({ todo }) => (
-    <div className={`p-1.5 rounded-md text-xs ${todo.completed ? 'bg-green-500/10 text-green-700 dark:text-green-300' : 'bg-primary/10 text-primary dark:text-dark-primary'}`}>
+    <div className={`p-1.5 text-xs border-l-2 ${todo.completed ? 'border-muted-foreground/40 bg-muted/60 text-muted-foreground' : 'border-foreground bg-muted'}`}>
       <p className={`font-semibold ${todo.completed ? 'line-through' : ''}`}>{todo.task}</p>
       <p className="text-muted-foreground truncate">{contextOf(todo.projectId)}</p>
     </div>
@@ -51,12 +51,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({ todos, projects, clients })
   const daysWithTodos = days.filter(d => d.todos.length > 0);
 
   return (
-    <div className="bg-card p-3 sm:p-6 rounded-lg shadow-sm border border-muted">
+    <div>
       <div className="flex justify-between items-center mb-4">
         <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="p-2 rounded-full hover:bg-muted" aria-label="Mese precedente">
           <ChevronLeftIcon className="w-6 h-6" />
         </button>
-        <h2 className="text-xl sm:text-2xl font-bold capitalize text-center">{monthLabel}</h2>
+        <h2 className="text-2xl font-extrabold tracking-[-0.02em] capitalize text-center">{monthLabel}</h2>
         <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} className="p-2 rounded-full hover:bg-muted" aria-label="Mese successivo">
           <ChevronRightIcon className="w-6 h-6" />
         </button>
@@ -83,7 +83,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ todos, projects, clients })
         {Array.from({ length: leadingBlanks }).map((_, i) => <div key={`empty-${i}`} className="border-t border-muted" />)}
         {days.map(d => (
           <div key={d.iso} className="border-t border-muted min-h-[100px] p-1.5 min-w-0">
-            <div className={`font-semibold text-sm ${d.isToday ? 'bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center' : ''}`}>{d.day}</div>
+            <div className={`font-semibold text-sm ${d.isToday ? 'bg-signal text-black w-6 h-6 flex items-center justify-center' : ''}`}>{d.day}</div>
             <div className="space-y-1 mt-1">{d.todos.map(t => <TodoChip key={t.id} todo={t} />)}</div>
           </div>
         ))}

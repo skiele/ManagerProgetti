@@ -116,7 +116,7 @@ const norm = s => s.replace(/\s/g, ' ');
   await page.getByLabel('Descrizione voce 2').fill('Montaggio e color');
   await page.getByLabel('Prezzo voce 2').fill('800');
   await page.getByRole('button', { name: 'Aggiungi voce' }).click(); // voce vuota: va scartata al salvataggio
-  check(norm(await page.locator('form').getByText(/^Totale:/).innerText()).includes('2002,00 €'), 'totale in editor 2000 + 2 bollo = 2002');
+  check(norm(await page.locator('form').getByText(/^Totale:/).innerText()).includes('2.002,00 €'), 'totale in editor 2000 + 2 bollo = 2002');
   await page.getByRole('button', { name: 'Salva preventivo' }).click();
   await page.getByText(`Preventivo ${number}`).waitFor();
   await page.waitForTimeout(800);
@@ -144,7 +144,7 @@ const norm = s => s.replace(/\s/g, ' ');
   const doc = norm(await page.locator('#print-root').innerText());
   check(doc.includes('Mario Bianchi Video') && doc.includes('P. IVA 01234567890'), 'PDF: intestazione con i tuoi dati');
   check(doc.includes('Studio Rossi') && doc.includes('Documentario'), 'PDF: cliente e oggetto');
-  check(doc.includes('2002,00 €') && doc.includes('Rimborso marca da bollo'), 'PDF: totale e marca da bollo');
+  check(doc.includes('2.002,00 €') && doc.includes('Rimborso marca da bollo'), 'PDF: totale e marca da bollo');
   check(doc.includes('190/2014') && doc.includes('IT60X0542811101000000123456'), 'PDF: dicitura forfettario e IBAN');
   await page.emulateMedia({ media: 'print' });
   await page.setViewportSize({ width: 794, height: 1123 });

@@ -5,6 +5,8 @@ import { User } from 'firebase/auth';
 import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment, AppData, Quote, QuoteStatus, BusinessProfile, TextDocument, DocumentKind } from './types';
 import { CalendarIcon, ChartBarIcon, PlusIcon, UsersIcon, LogOutIcon, SunIcon, MoonIcon, CogIcon, MenuIcon, XIcon, ListTodoIcon, BriefcaseIcon, FileTextIcon } from './components/icons';
 import Modal from './components/Modal';
+import Wordmark from './components/Wordmark';
+import PageHeader from './components/PageHeader';
 import CalendarView from './components/CalendarView';
 import TaskView from './components/TaskView';
 import LoginScreen from './components/LoginScreen';
@@ -91,7 +93,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
   const [filterYear, setFilterYear] = useState('all');
   const [filterMonth, setFilterMonth] = useState('all');
   
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'dark');
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'light');
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -572,16 +574,23 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
     [documents, selectedView]);
   const openDocument = (id: string) => handleSelectView(`doc:${id}`);
   
-  const getPriorityClass = (clientId: string): string => {
-    const priority = clientPriorities.get(clientId);
-    if (!priority) return 'border-transparent';
-    switch (priority) {
-      case ProjectPriority.Alta: return 'border-orange-500';
-      case ProjectPriority.Media: return 'border-green-500';
-      case ProjectPriority.Bassa: return 'border-gray-500';
-      default: return 'border-transparent';
+  // Pallino accanto al cliente: arancio = priorità alta, bianco = media, grigio = bassa o nessun progetto attivo
+  const priorityDotClass = (clientId: string): string => {
+    switch (clientPriorities.get(clientId)) {
+      case ProjectPriority.Alta: return 'bg-signal';
+      case ProjectPriority.Media: return 'bg-white';
+      default: return 'bg-neutral-600';
     }
   };
+
+  const navItems: { view: string; label: string; isActive: (v: string) => boolean }[] = [
+    { view: 'dashboard', label: 'Dashboard', isActive: v => v === 'dashboard' },
+    { view: 'projects', label: 'Progetti', isActive: v => v === 'projects' || v.startsWith('project:') },
+    { view: 'documents', label: 'Documenti', isActive: v => v === 'documents' || v.startsWith('doc:') },
+    { view: 'tasks', label: 'Attività', isActive: v => v === 'tasks' },
+    { view: 'calendar', label: 'Calendario', isActive: v => v === 'calendar' },
+    { view: 'settings', label: 'Impostazioni', isActive: v => v === 'settings' },
+  ];
 
   const handleSelectView = (view: string) => {
     setSelectedView(view);
@@ -622,88 +631,95 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
   }
 
   return (
-    <div className="relative min-h-screen md:flex font-sans bg-background text-foreground dark:bg-dark-background dark:text-dark-foreground">
-      <header className="md:hidden flex justify-between items-center p-4 bg-card dark:bg-dark-card text-foreground dark:text-dark-foreground shadow-lg fixed top-0 left-0 right-0 z-20 h-16 border-b border-muted dark:border-dark-muted">
-        <div className="flex items-center">
-            <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
-            <h1 className="text-xl font-bold ml-2">Progetta</h1>
-        </div>
+    <div className="relative min-h-screen md:flex font-sans bg-background text-foreground">
+      <header className="md:hidden flex justify-between items-center px-4 bg-black text-white fixed top-0 left-0 right-0 z-20 h-14">
+        <Wordmark />
         <button onClick={() => setIsSidebarOpen(true)} className="p-2" aria-label="Apri menu">
             <MenuIcon className="w-6 h-6"/>
         </button>
       </header>
 
       {isSidebarOpen && (
-          <div 
-              className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30" 
+          <div
+              className="md:hidden fixed inset-0 bg-black/60 z-30"
               onClick={() => setIsSidebarOpen(false)}
               aria-hidden="true"
           ></div>
       )}
 
-      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-secondary dark:bg-dark-secondary text-secondary-foreground dark:text-dark-secondary-foreground flex flex-col p-4 shadow-2xl transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center">
-                <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
-                <h1 className="text-2xl font-bold ml-2">Progetta</h1>
-            </div>
-            <div className="flex items-center gap-2">
-                <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-muted dark:hover:bg-dark-muted transition-colors" aria-label="Cambia tema">
-                    {theme === 'light' ? <MoonIcon className="w-5 h-5"/> : <SunIcon className="w-5 h-5"/>}
+      {/* Barra laterale: sempre nera, in entrambi i temi */}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-black text-white flex flex-col px-6 py-7 transform transition-transform duration-300 ease-in-out md:sticky md:top-0 md:h-screen md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex items-center justify-between mb-10">
+            <Wordmark />
+            <div className="flex items-center -mr-2">
+                <button onClick={toggleTheme} className="p-2 text-neutral-400 hover:text-white" aria-label={theme === 'light' ? 'Passa al tema scuro' : 'Passa al tema chiaro'}>
+                    {theme === 'light' ? <MoonIcon className="w-[18px] h-[18px]"/> : <SunIcon className="w-[18px] h-[18px]"/>}
                 </button>
-                 <button onClick={onLogout} className="p-2 rounded-full hover:bg-muted dark:hover:bg-dark-muted transition-colors" aria-label="Esci">
-                    <LogOutIcon className="w-5 h-5"/>
+                <button onClick={onLogout} className="p-2 text-neutral-400 hover:text-white" aria-label="Esci">
+                    <LogOutIcon className="w-[18px] h-[18px]"/>
                 </button>
-                <button onClick={() => setIsSidebarOpen(false)} className="p-2 rounded-full hover:bg-muted dark:hover:bg-dark-muted md:hidden" aria-label="Chiudi menu">
+                <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-neutral-400 hover:text-white md:hidden" aria-label="Chiudi menu">
                     <XIcon className="w-5 h-5"/>
                 </button>
             </div>
         </div>
-        <nav ref={navRef} className={`flex-grow overflow-y-auto no-scrollbar ${isNavScrollable ? 'fade-bottom' : ''}`}>
-            <ul>
-                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'dashboard' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('dashboard')}><ChartBarIcon className="w-5 h-5 mr-3"/> Dashboard</li>
-                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'projects' || selectedView.startsWith('project:') ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('projects')}><BriefcaseIcon className="w-5 h-5 mr-3"/> Progetti</li>
-                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'documents' || selectedView.startsWith('doc:') ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('documents')}><FileTextIcon className="w-5 h-5 mr-3"/> Documenti</li>
-                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'tasks' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('tasks')}><ListTodoIcon className="w-5 h-5 mr-3"/> Attività</li>
-                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'calendar' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('calendar')}><CalendarIcon className="w-5 h-5 mr-3"/> Calendario</li>
-                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'settings' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('settings')}><CogIcon className="w-5 h-5 mr-3"/> Impostazioni</li>
+        <nav ref={navRef} aria-label="Navigazione principale" className={`flex-grow overflow-y-auto no-scrollbar ${isNavScrollable ? 'fade-bottom' : ''}`}>
+            <ul className="border-b border-neutral-800">
+                {navItems.map(item => {
+                    const active = item.isActive(selectedView);
+                    return (
+                        <li key={item.view} className="border-t border-neutral-800">
+                            <button onClick={() => handleSelectView(item.view)} aria-current={active ? 'page' : undefined}
+                                className={`w-full flex items-center justify-between py-2.5 text-left ${active ? 'text-white font-semibold' : 'text-neutral-400 hover:text-white'}`}>
+                                {item.label}
+                                {active && <span aria-hidden="true" className="w-2 h-2 bg-signal"></span>}
+                            </button>
+                        </li>
+                    );
+                })}
             </ul>
-            <h2 className="text-sm font-semibold text-muted-foreground dark:text-dark-muted-foreground mt-6 mb-2 px-3 uppercase">Clienti</h2>
+            <h2 className="mt-10 mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500">Clienti</h2>
             <ul>
                 {sortedClients.map((client) => (
-                    <li key={client.id} draggable="true" onDragStart={e => handleDragStart(e, client)} onDragOver={handleDragOver} onDragEnter={e => handleDragEnter(e, client)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, client)} onDragEnd={handleDragEnd} 
-                        className={`group flex items-center justify-between p-3 rounded-lg cursor-grab mb-1 transition-all text-sm border-l-4
-                        ${selectedView === client.id ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'} 
-                        ${getPriorityClass(client.id)}
-                        ${inactiveClients.has(client.id) ? 'opacity-60' : ''}`}>
-                        <div className="flex items-center flex-1 min-w-0" onClick={() => handleSelectView(client.id)}>
-                            <UsersIcon className="w-4 h-4 mr-3 flex-shrink-0"/> 
+                    <li key={client.id} draggable="true" onDragStart={e => handleDragStart(e, client)} onDragOver={handleDragOver} onDragEnter={e => handleDragEnter(e, client)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, client)} onDragEnd={handleDragEnd}
+                        className={`cursor-grab ${inactiveClients.has(client.id) ? 'opacity-50' : ''}`}>
+                        <button onClick={() => handleSelectView(client.id)} aria-current={selectedView === client.id ? 'page' : undefined}
+                            className={`w-full flex items-center gap-2.5 py-1.5 text-left text-sm ${selectedView === client.id ? 'text-white font-semibold' : 'text-neutral-300 hover:text-white'}`}>
+                            <span aria-hidden="true" className={`w-1.5 h-1.5 flex-shrink-0 ${priorityDotClass(client.id)}`}></span>
                             <span className="truncate">{client.name}</span>
-                        </div>
+                        </button>
                     </li>
                 ))}
             </ul>
         </nav>
-        <div className="mt-auto pt-4 text-center text-xs text-muted-foreground flex-shrink-0">v1.7.0</div>
+        <div className="pt-4 text-[11px] text-neutral-600 flex-shrink-0">v2.0</div>
       </aside>
 
-      <main className="w-full md:flex-1 p-4 sm:p-8 pb-28 sm:pb-28 overflow-y-auto mt-16 md:mt-0 min-w-0">
-        {selectedView === 'dashboard' && <Dashboard 
-            collectedIncome={dashboardTotals.collected} 
+      <main className="w-full md:flex-1 px-4 pt-6 sm:px-12 sm:pt-7 pb-28 sm:pb-28 mt-14 md:mt-0 min-w-0">
+        {selectedView === 'dashboard' && <Dashboard
+            collectedIncome={dashboardTotals.collected}
             futureIncome={dashboardTotals.future}
-            potentialIncome={dashboardTotals.potential} 
+            potentialIncome={dashboardTotals.potential}
             chartData={chartData}
             filterYear={filterYear}
             setFilterYear={setFilterYear}
             filterMonth={filterMonth}
             setFilterMonth={setFilterMonth}
             availableYears={availableYears}
+            projects={projects}
+            clients={clients}
+            todos={todos}
+            projectTotals={allProjectTotals}
+            onOpenProject={openProject}
+            onOpenTasks={() => handleSelectView('tasks')}
+            onOpenProjects={() => handleSelectView('projects')}
+            onNewProject={() => openModal('project')}
         />}
         {selectedView === 'tasks' && <TaskView todos={todos} projects={projects} clients={clients} onToggleTodo={handleToggleTodo} onDeleteTodo={handleDeleteTodo} onReorderTodos={handleReorderTodos}/>}
-        {selectedView === 'calendar' && <CalendarView todos={todos} projects={projects} clients={clients}/>}
+        {selectedView === 'calendar' && <div className="max-w-[1120px]"><PageHeader overline="Scadenze delle attività" title="Calendario" /><CalendarView todos={todos} projects={projects} clients={clients}/></div>}
         {selectedView === 'documents' && (
-            <div className="max-w-4xl mx-auto">
-                <h1 className="text-3xl font-bold mb-6">Documenti</h1>
+            <div className="max-w-[1120px]">
+                <PageHeader overline={`${documents.length} ${documents.length === 1 ? 'documento' : 'documenti'}`} title="Documenti" />
                 <DocumentsList documents={documents} projects={projects} clients={clients} groupByProject onOpen={openDocument} onCreate={() => handleCreateDocument(null)} />
             </div>
         )}
@@ -765,31 +781,20 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
         )}
         {selectedView === 'settings' && <SettingsView userId={userId} profile={profile} onSaveProfile={p => persist(firebaseService.saveProfile(userId, p))} />}
         {selectedClient && (
-            <ClientView 
-                client={selectedClient} 
-                projects={projects.filter(p => p.clientId === selectedClient.id)} 
-                todos={todos}
-                onUpdateProjectWorkStatus={handleUpdateProjectWorkStatus}
-                onUpdateProjectPaymentStatus={handleUpdateProjectPaymentStatus}
-                onUpdateProjectPriority={handleUpdateProjectPriority}
-                onToggleTodo={handleToggleTodo}
-                onAddTodo={projectId => openModal('todo', projectId)}
-                onAddPayment={projectId => openModal('payment', projectId)}
-                onDeletePayment={handleDeletePayment}
-                onAiAddProject={openAiModal}
-                onDeleteProject={handleDeleteProject}
-                onEditProject={projectId => openModal('editProject', projectId)}
-                onDeleteTodo={handleDeleteTodo}
-                onUpdateProjectNotes={handleUpdateProjectNotes}
-                onDeleteClient={handleDeleteClient}
+            <ClientView
+                client={selectedClient}
+                projects={projects.filter(p => p.clientId === selectedClient.id)}
+                projectTotals={allProjectTotals}
                 onOpenProject={openProject}
+                onAiAddProject={openAiModal}
+                onDeleteClient={handleDeleteClient}
             />
         )}
       </main>
       
       {!selectedDocument && <button 
         onClick={fab.action}
-        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-primary text-primary-foreground dark:bg-dark-primary dark:text-dark-primary-foreground shadow-lg hover:bg-primary-hover dark:hover:bg-dark-primary-hover flex items-center justify-center transform hover:scale-105 transition-transform"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-signal text-black hover:bg-accent-hover flex items-center justify-center"
         aria-label={fab.label}
       >
         <PlusIcon className="w-7 h-7" />

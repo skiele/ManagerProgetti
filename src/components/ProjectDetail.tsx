@@ -5,6 +5,7 @@ import { workStatusConfig, paymentStatusConfig, projectPriorityConfig } from '..
 import { formatCurrency } from '../utils/formatting';
 import StatusChip from './StatusChip';
 import TodoItem from './TodoItem';
+import PageHeader from './PageHeader';
 
 export type ProjectTab = 'overview' | 'tasks' | 'payments' | 'quotes' | 'documents';
 
@@ -30,10 +31,10 @@ interface ProjectDetailProps {
   onDeletePayment: (projectId: string, paymentId: string) => void;
 }
 
-const Stat: React.FC<{ label: string; value: string; className?: string }> = ({ label, value, className = '' }) => (
-  <div className="bg-card dark:bg-dark-card p-4 rounded-lg border border-muted/50 dark:border-dark-muted/50">
-    <p className="text-sm text-muted-foreground dark:text-dark-muted-foreground">{label}</p>
-    <p className={`text-2xl font-bold mt-1 ${className}`}>{value}</p>
+const Stat: React.FC<{ label: string; value: string; className?: string; first?: boolean }> = ({ label, value, className = '', first }) => (
+  <div className={first ? '' : 'sm:pl-6 sm:border-l-2 border-foreground'}>
+    <p className="text-[11px] font-semibold uppercase tracking-[0.12em]">{label}</p>
+    <p className={`mt-2 text-4xl font-extrabold tracking-[-0.04em] leading-none ${className}`}>{value}</p>
   </div>
 );
 
@@ -64,27 +65,23 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   ];
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <button onClick={onBack} className="flex items-center text-sm text-muted-foreground hover:text-primary dark:hover:text-dark-primary mb-4">
-        <ChevronLeftIcon className="w-4 h-4 mr-1" /> {client ? client.name : 'Indietro'}
+    <div className="max-w-[1120px]">
+      <button onClick={onBack} className="flex items-center text-[13px] font-medium underline underline-offset-[3px] mb-4 hover:text-muted-foreground">
+        <ChevronLeftIcon className="w-4 h-4 mr-0.5" /> {client ? client.name : 'Indietro'}
       </button>
 
-      <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-4">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-bold break-words">{project.name}</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {client?.name ?? 'Cliente sconosciuto'} · creato il {new Date(project.createdAt).toLocaleDateString('it-IT')}
-          </p>
-        </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <button onClick={() => onEditProject(project.id)} className="text-muted-foreground hover:text-primary p-2 rounded-full" aria-label={`Modifica progetto ${project.name}`}>
+      <PageHeader
+        overline={`${client?.name ?? 'Cliente sconosciuto'} · creato il ${new Date(project.createdAt).toLocaleDateString('it-IT')}`}
+        title={project.name}
+        actions={<>
+          <button onClick={() => onEditProject(project.id)} className="p-2 border-2 border-foreground hover:bg-muted" aria-label={`Modifica progetto ${project.name}`}>
             <EditIcon className="w-5 h-5" />
           </button>
-          <button onClick={() => onDeleteProject(project.id)} className="text-muted-foreground hover:text-destructive p-2 rounded-full" aria-label={`Elimina progetto ${project.name}`}>
+          <button onClick={() => onDeleteProject(project.id)} className="p-2 border-2 border-foreground hover:bg-destructive hover:text-destructive-foreground hover:border-destructive" aria-label={`Elimina progetto ${project.name}`}>
             <TrashIcon className="w-5 h-5" />
           </button>
-        </div>
-      </div>
+        </>}
+      />
 
       <div className="flex flex-wrap gap-2 mb-6">
         <StatusChip value={project.priority} onChange={(val) => onUpdateProjectPriority(project.id, val as ProjectPriority)} config={projectPriorityConfig} options={Object.values(ProjectPriority)} icon={<FlagIcon className="w-3 h-3" />} />
@@ -92,7 +89,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         <StatusChip value={project.paymentStatus} onChange={(val) => onUpdateProjectPaymentStatus(project.id, val as PaymentStatus)} config={paymentStatusConfig} options={Object.values(PaymentStatus)} icon={<DollarSignIcon className="w-3 h-3" />} />
       </div>
 
-      <div role="tablist" className="flex gap-1 border-b border-muted dark:border-dark-muted mb-6 overflow-x-auto no-scrollbar">
+      <div role="tablist" className="flex gap-6 border-b-2 border-foreground mb-8 overflow-x-auto no-scrollbar">
         {tabs.map(t => (
           <button
             key={t.id}
@@ -100,7 +97,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             ref={tab === t.id ? activeTabRef : undefined}
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
-            className={`px-4 py-2 -mb-px border-b-2 text-sm font-semibold whitespace-nowrap ${tab === t.id ? 'border-primary text-primary dark:border-dark-primary dark:text-dark-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+            className={`py-2.5 -mb-[2px] border-b-4 text-[12px] font-semibold uppercase tracking-[0.1em] whitespace-nowrap ${tab === t.id ? 'border-signal text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
           >
             {t.label}{t.count ? <span className="ml-1.5 text-xs font-normal">({t.count})</span> : null}
           </button>
@@ -109,20 +106,20 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {tab === 'overview' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Stat label="Totale" value={formatCurrency(projectTotal)} />
-            <Stat label="Incassato" value={formatCurrency(paidAmount)} className="text-green-500" />
-            <Stat label="Da incassare" value={formatCurrency(Math.max(0, projectTotal - paidAmount))} className={projectTotal - paidAmount > 0 ? 'text-orange-500' : ''} />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <Stat first label="Totale" value={formatCurrency(projectTotal)} />
+            <Stat label="Incassato" value={formatCurrency(paidAmount)} />
+            <Stat label="Da incassare" value={formatCurrency(Math.max(0, projectTotal - paidAmount))} className={projectTotal - paidAmount > 0 ? 'text-signal' : ''} />
           </div>
-          <p className="text-xs text-muted-foreground -mt-4">Totale = valore del progetto ({formatCurrency(project.value)}) + incassi delle attività.</p>
+          <p className="text-xs text-muted-foreground">Totale = valore del progetto ({formatCurrency(project.value)}) + incassi delle attività.</p>
 
           <div>
             <div className="flex justify-between items-center text-sm text-muted-foreground mb-1">
               <span>Attività completate: {completedTodos} di {todos.length}</span>
               <span>{Math.round(progress)}%</span>
             </div>
-            <div className="w-full bg-muted dark:bg-dark-muted rounded-full h-2">
-              <div className="bg-primary dark:bg-dark-primary h-2 rounded-full" style={{ width: `${progress}%` }}></div>
+            <div className="w-full bg-muted h-2">
+              <div className="bg-foreground h-2" style={{ width: `${progress}%` }}></div>
             </div>
           </div>
 

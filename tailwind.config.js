@@ -26,6 +26,7 @@ export default {
         'accent-foreground': 'hsl(var(--accent-foreground) / <alpha-value>)',
         'destructive': 'hsl(var(--destructive) / <alpha-value>)',
         'destructive-foreground': 'hsl(var(--destructive-foreground) / <alpha-value>)',
+        'signal': 'hsl(var(--signal) / <alpha-value>)',
 
         // Dark Theme
         dark: {
@@ -53,11 +54,10 @@ export default {
           'destructive-foreground': 'hsl(0 0% 100%)',
         }
       },
-      borderRadius: {
-        lg: `0.75rem`,
-        md: `calc(0.75rem - 2px)`,
-        sm: `calc(0.75rem - 4px)`,
-      },
+      // Angoli vivi e superfici piatte: niente arrotondamenti né ombre
+      borderRadius: { lg: '0px', md: '0px', sm: '0px', DEFAULT: '0px' },
+      boxShadow: { sm: 'none', DEFAULT: 'none', md: 'none', lg: 'none', xl: 'none', '2xl': 'none' },
+      fontFamily: { sans: ['Archivo', 'Helvetica Neue', 'Arial', 'sans-serif'] },
     },
   },
   plugins: [],

@@ -6,10 +6,10 @@ import { formatCurrency } from '../utils/formatting';
 import { addDays, formatDate, itemAmount, nextQuoteNumber, quoteTotals, STAMP_DUTY_AMOUNT, STAMP_DUTY_THRESHOLD } from '../utils/quotes';
 
 export const quoteStatusConfig: Record<QuoteStatus, { color: string; label: string }> = {
-  [QuoteStatus.Bozza]: { color: 'bg-gray-500', label: 'Bozza' },
-  [QuoteStatus.Inviato]: { color: 'bg-yellow-500', label: 'Inviato' },
-  [QuoteStatus.Accettato]: { color: 'bg-green-500', label: 'Accettato' },
-  [QuoteStatus.Rifiutato]: { color: 'bg-red-500', label: 'Rifiutato' },
+  [QuoteStatus.Bozza]: { color: 'bg-transparent text-foreground border border-foreground', label: 'Bozza' },
+  [QuoteStatus.Inviato]: { color: 'bg-signal text-black border border-signal', label: 'Inviato' },
+  [QuoteStatus.Accettato]: { color: 'bg-foreground text-background border border-foreground', label: 'Accettato' },
+  [QuoteStatus.Rifiutato]: { color: 'bg-muted text-muted-foreground border border-muted line-through', label: 'Rifiutato' },
 };
 
 interface QuotesTabProps {
@@ -241,7 +241,7 @@ const QuotesTab: React.FC<QuotesTabProps> = ({ project, client, quotes, allQuote
               <p className="text-sm text-muted-foreground">{formatDate(quote.date)} · {quote.items.length} {quote.items.length === 1 ? 'voce' : 'voci'} · {formatCurrency(total)}</p>
             </div>
             <select value={quote.status} onChange={e => onChangeStatus(quote, e.target.value as QuoteStatus)} aria-label={`Stato preventivo ${quote.number}`}
-              className={`!w-auto self-start sm:self-auto text-xs font-medium text-white !border-0 rounded-full ${quoteStatusConfig[quote.status].color}`}>
+              className={`!w-auto self-start sm:self-auto !py-1 !text-[11px] font-semibold uppercase tracking-wider ${quoteStatusConfig[quote.status].color}`}>
               {Object.values(QuoteStatus).map(s => <option key={s} value={s} className="text-black">{quoteStatusConfig[s].label}</option>)}
             </select>
             <div className="flex items-center gap-1">

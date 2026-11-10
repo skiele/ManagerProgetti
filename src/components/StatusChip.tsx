@@ -1,4 +1,5 @@
 import React from 'react';
+import { tagClass } from '../config/status';
 
 interface StatusChipProps {
   value: string;
@@ -10,7 +11,7 @@ interface StatusChipProps {
 
 // Etichetta colorata che si comporta da menu a tendina
 const StatusChip: React.FC<StatusChipProps> = ({ value, onChange, config, options, icon }) => (
-  <div className={`relative group inline-flex items-center gap-2 text-xs font-medium text-white px-2.5 py-1.5 rounded-full cursor-pointer transition-all ${config[value]?.color ?? 'bg-gray-500'}`}>
+  <div className={`relative group cursor-pointer ${tagClass} ${config[value]?.color ?? 'bg-muted'}`}>
     {icon}
     <span>{config[value]?.label ?? value}</span>
     <select

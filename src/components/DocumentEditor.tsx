@@ -124,8 +124,8 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({ userId, document: doc, 
   const clientName = (p: Project) => clients.find(c => c.id === p.clientId)?.name ?? '';
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <button onClick={onBack} className="flex items-center text-sm text-muted-foreground hover:text-primary dark:hover:text-dark-primary mb-4">
+    <div className="max-w-[880px]">
+      <button onClick={onBack} className="flex items-center text-[13px] font-medium underline underline-offset-[3px] mb-4 hover:text-muted-foreground">
         <ChevronLeftIcon className="w-4 h-4 mr-1" /> Indietro
       </button>
 
@@ -134,7 +134,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({ userId, document: doc, 
         aria-label="Titolo del documento"
         value={fields.title}
         onChange={e => setFields(f => ({ ...f, title: e.target.value }))}
-        className="!text-2xl !font-bold !border-0 !px-0 !ring-0"
+        className="!text-4xl !font-extrabold !tracking-[-0.03em] !border-0 !border-b-4 !border-foreground !px-0 !pb-3 !ring-0"
       />
 
       <div className="flex flex-wrap items-center gap-2 mt-2 mb-4 text-sm">
@@ -171,7 +171,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({ userId, document: doc, 
         value={fields.content}
         onChange={e => setFields(f => ({ ...f, content: e.target.value }))}
         placeholder="Scrivi qui. Puoi usare Markdown: # Titolo, ## Sezione, **grassetto**, - elenco"
-        className="min-h-[60vh] font-serif text-base leading-relaxed"
+        className="min-h-[60vh] !text-base !leading-[1.7] !p-5 !border-foreground/30"
       />
 
       <div className="flex flex-wrap items-center justify-between gap-2 mt-4">

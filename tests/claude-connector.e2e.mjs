@@ -71,7 +71,7 @@ try {
   await page.click('button[aria-label="Aggiungi Progetto"]');
   await page.fill('input[placeholder="Nome Progetto"]', 'Corto sul lago');
   await page.click('form button[type=submit]');
-  await page.getByRole('button', { name: 'Corto sul lago', exact: true }).click();
+  await page.click('button[aria-label="Apri progetto Corto sul lago"]');
 
   // Documento creato nell'app
   await page.getByRole('tab', { name: /Documenti/ }).click();

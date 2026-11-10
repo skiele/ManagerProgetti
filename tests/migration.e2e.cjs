@@ -83,11 +83,11 @@ const legacy = {
   await page.click('button[type=submit]');
   await page.getByRole('heading', { name: 'Dashboard' }).waitFor({ timeout: 20000 });
 
-  const cardValue = async label => page.locator('h3', { hasText: new RegExp(`^${label}$`) }).locator('xpath=following-sibling::p').innerText();
+  const cardValue = async label => page.locator('p', { hasText: label }).first().locator('xpath=following-sibling::p[1]').innerText();
   const norm = s => s.replace(/\s/g, ' ');
-  check(norm(await cardValue('Incassati')) === '300,00 €', `dashboard Incassati = 300 (got ${await cardValue('Incassati')})`);
-  check(norm(await cardValue('Incassi Futuri')) === '2900,00 €', `dashboard Futuri = 2.900 (got ${await cardValue('Incassi Futuri')})`);
-  check(norm(await cardValue('Incassi Potenziali')) === '500,00 €', `dashboard Potenziali = 500 (got ${await cardValue('Incassi Potenziali')})`);
+  check(norm(await cardValue('Incassato totale')) === '300 €', `dashboard Incassato = 300 (got ${await cardValue('Incassato totale')})`);
+  check(norm(await cardValue('Da incassare')) === '2.900 €', `dashboard Da incassare = 2.900 (got ${await cardValue('Da incassare')})`);
+  check(norm(await cardValue('In preventivo')) === '500 €', `dashboard In preventivo = 500 (got ${await cardValue('In preventivo')})`);
   await page.screenshot({ path: path.join(OUT, 'shot-dashboard.png') });
 
   const userDoc = await getDoc(`users/${uid}`);
@@ -117,8 +117,9 @@ const legacy = {
 
   // 3. Pagamento su Spot TV -> stato Pagato
   await page.getByRole('navigation').getByText('Alfa Film', { exact: true }).click();
-  const spot = page.locator('div.bg-card', { has: page.getByRole('heading', { name: 'Spot TV' }) });
-  await spot.getByRole('button', { name: 'Aggiungi Pagamento' }).click();
+  await page.click('button[aria-label="Apri progetto Spot TV"]');
+  await page.getByRole('tab', { name: /Pagamenti/ }).click();
+  await page.getByRole('button', { name: 'Aggiungi pagamento' }).click();
   await page.fill('input[placeholder="Importo Pagamento (€)"]', '900');
   await page.click('form button[type=submit]');
   await page.waitForTimeout(1500);
@@ -129,12 +130,13 @@ const legacy = {
   // 4. Ricarica: nessuna ri-migrazione, i dati nuovi restano
   await page.reload();
   await page.getByRole('heading', { name: 'Dashboard' }).waitFor({ timeout: 20000 });
-  check(norm(await cardValue('Incassati')) === '1200,00 €', `dopo il reload Incassati = 1.200 (got ${await cardValue('Incassati')})`);
+  check(norm(await cardValue('Incassato totale')) === '1.200 €', `dopo il reload Incassato = 1.200 (got ${await cardValue('Incassato totale')})`);
   projects = await listCol(`users/${uid}/projects`);
   check(projects.p1.payments.length === 2, 'il reload non ha riapplicato i vecchi array');
 
   // 5. Eliminazione progetto con le sue attività
   await page.getByRole('navigation').getByText('Alfa Film', { exact: true }).click();
+  await page.click('button[aria-label="Apri progetto Videoclip"]');
   await page.click('button[aria-label="Elimina progetto Videoclip"]');
   await page.waitForTimeout(1500);
   projects = await listCol(`users/${uid}/projects`);
