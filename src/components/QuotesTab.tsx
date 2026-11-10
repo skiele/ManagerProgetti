@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState } from 'react';
 import { BusinessProfile, Client, Project, Quote, QuoteItem, QuoteStatus } from '../types';
 import { CopyIcon, DownloadIcon, EditIcon, PlusIcon, TrashIcon, XIcon } from './icons';
 import { formatCurrency } from '../utils/formatting';
+import PrintPortal from './PrintPortal';
 import { addDays, formatDate, itemAmount, nextQuoteNumber, quoteTotals, STAMP_DUTY_AMOUNT, STAMP_DUTY_THRESHOLD } from '../utils/quotes';
 
 export const quoteStatusConfig: Record<QuoteStatus, { color: string; label: string }> = {
@@ -97,29 +97,6 @@ export const QuoteDocument: React.FC<{ quote: Quote; project: Project; profile: 
   );
 };
 
-const PrintPortal: React.FC<{ children: React.ReactNode; onDone: () => void }> = ({ children, onDone }) => {
-  const [container] = useState(() => {
-    const el = document.createElement('div');
-    el.id = 'print-root';
-    return el;
-  });
-  // onDone in un ref: l'effetto (e quindi la stampa) deve partire una sola volta
-  const onDoneRef = useRef(onDone);
-  onDoneRef.current = onDone;
-  useEffect(() => {
-    document.body.appendChild(container);
-    const done = () => onDoneRef.current();
-    window.addEventListener('afterprint', done);
-    // Lascia il tempo al browser di disegnare il documento prima di stampare
-    const t = setTimeout(() => window.print(), 50);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener('afterprint', done);
-      container.remove();
-    };
-  }, [container]);
-  return createPortal(children, container);
-};
 
 // ---------------------------------------------------------------------------
 // Editor

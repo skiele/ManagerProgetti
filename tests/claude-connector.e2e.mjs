@@ -94,7 +94,7 @@ try {
   // Claude si collega
   const claude = await connect(url);
   const tools = (await claude.listTools()).tools.map(t => t.name).sort();
-  check(tools.length === 16 && !tools.some(t => /delete|payment|status/i.test(t)), `16 strumenti, nessuno per eliminare/pagamenti/stati: ${tools.join(', ')}`);
+  check(tools.length === 21 && !tools.some(t => /delete|payment|status/i.test(t)), `21 strumenti, nessuno per eliminare/pagamenti/stati: ${tools.join(', ')}`);
   check((claude.getInstructions() || '').includes('forfettario'), 'istruzioni del server ricevute');
 
   const projects = (await call(claude, 'list_projects')).data;

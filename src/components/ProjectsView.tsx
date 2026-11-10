@@ -17,6 +17,8 @@ interface ProjectsViewProps {
 const priorityRank: Record<ProjectPriority, number> = { [ProjectPriority.Alta]: 0, [ProjectPriority.Media]: 1, [ProjectPriority.Bassa]: 2 };
 
 export const isProjectDone = (p: Project) => p.workStatus === WorkStatus.Consegnato && p.paymentStatus === PaymentStatus.Pagato;
+// Chiuso = consegnato e pagato, oppure annullato: va in fondo e in secondo piano
+export const isProjectClosed = (p: Project) => isProjectDone(p) || p.workStatus === WorkStatus.Annullato;
 
 const Badge: React.FC<{ color: string; label: string }> = ({ color, label }) => (
   <span className={`${tagClass} ${color}`}>{label}</span>
@@ -29,7 +31,7 @@ export const ProjectRow: React.FC<{ project: Project; subtitle: string; total: n
   return (
     <li>
       <button onClick={() => onOpen(p.id)}
-        className={`w-full text-left flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-4 pl-4 pr-2 border-b border-foreground hover:bg-muted/60 border-l-4 ${p.priority === ProjectPriority.Alta ? 'border-l-signal' : p.priority === ProjectPriority.Media ? 'border-l-foreground' : 'border-l-transparent'}`}
+        className={`w-full text-left flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-4 pl-4 pr-2 border-b border-foreground hover:bg-muted/60 border-l-4 ${isProjectClosed(p) ? 'border-l-transparent opacity-50 hover:opacity-100' : p.priority === ProjectPriority.Alta ? 'border-l-signal' : p.priority === ProjectPriority.Media ? 'border-l-foreground' : 'border-l-transparent'}`}
         aria-label={`Apri progetto ${p.name}`}>
         <div className="flex-1 min-w-0">
           <p className="font-semibold truncate">{p.name}</p>
@@ -86,12 +88,13 @@ export const ProjectTile: React.FC<{ project: Project; overline: string; total: 
   const open = todos.filter(t => !t.completed);
   const next = open.filter(t => t.dueDate).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!))[0];
   const today = new Date().toISOString().slice(0, 10);
-  const priorityBar = p.priority === ProjectPriority.Alta ? 'bg-signal' : p.priority === ProjectPriority.Media ? 'bg-foreground' : 'bg-muted';
-  const cancelled = p.workStatus === WorkStatus.Annullato;
+  const closed = isProjectClosed(p);
+  // La priorità conta solo per i progetti aperti
+  const priorityBar = closed ? 'bg-muted' : p.priority === ProjectPriority.Alta ? 'bg-signal' : p.priority === ProjectPriority.Media ? 'bg-foreground' : 'bg-muted';
   return (
     <li className="flex">
       <button onClick={() => onOpen(p.id)} aria-label={`Apri progetto ${p.name}`}
-        className={`group w-full text-left flex flex-col border-2 border-foreground bg-card hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_hsl(var(--foreground))] transition-transform ${cancelled ? 'opacity-60' : ''}`}>
+        className={`group w-full text-left flex flex-col border-2 border-foreground bg-card hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_hsl(var(--foreground))] transition ${closed ? 'opacity-50 hover:opacity-100 border-foreground/40' : ''}`}>
         <span aria-hidden="true" className={`h-1.5 w-full ${priorityBar}`}></span>
         <span className="flex flex-col flex-1 p-5 gap-4">
           <span>
@@ -144,7 +147,7 @@ const ProjectsView: React.FC<ProjectsViewProps> = ({ projects, clients, projectT
         if (!q) return true;
         return p.name.toLowerCase().includes(q) || (clientName.get(p.clientId) || '').toLowerCase().includes(q);
       })
-      .sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority] || b.createdAt.localeCompare(a.createdAt));
+      .sort((a, b) => Number(isProjectClosed(a)) - Number(isProjectClosed(b)) || priorityRank[a.priority] - priorityRank[b.priority] || b.createdAt.localeCompare(a.createdAt));
   }, [projects, filter, search, clientName]);
 
   const filters: { id: Filter; label: string }[] = [

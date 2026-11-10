@@ -10,6 +10,17 @@ import { z } from 'zod';
 const WORK = ['preventivo da inviare', 'preventivo inviato', 'in lavorazione', 'consegnato', 'annullato'];
 const PRIORITY = ['bassa', 'media', 'alta'];
 const KINDS = ['soggetto', 'trattamento', 'sceneggiatura', 'note', 'altro'];
+const ASPECTS = ['16:9', '2.39:1', '4:3', '1:1', '4:5', '9:16'];
+const SIZES = ['EWS', 'WS', 'MS', 'MCU', 'CU', 'ECU', 'INS'];
+const MOVES = ['fissa', 'panoramica', 'tilt', 'carrello', 'a mano', 'gimbal', 'drone', 'zoom'];
+
+// Stessa logica di src/utils/storyboard.ts: codici 1A, 1B, 2A…
+const shotLetter = i => { let s = ''; let n = i; do { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while (n >= 0); return s; };
+const withCodes = shots => {
+  const sorted = [...shots].sort((a, b) => a.scene - b.scene || a.order - b.order);
+  const count = new Map();
+  return sorted.map(s => { const i = count.get(s.scene) || 0; count.set(s.scene, i + 1); return { ...s, code: `${s.scene}${shotLetter(i)}` }; });
+};
 const STAMP_DUTY_THRESHOLD = 77.47;
 const STAMP_DUTY_AMOUNT = 2;
 
@@ -375,5 +386,97 @@ export function registerTools(server, db, uid) {
     await col('quotes').doc(quoteId).update(update);
     await log('update_quote', `Modificata la bozza di preventivo ${quote.number}`);
     return text({ id: quoteId, number: quote.number, ...quoteTotals({ ...quote, ...update }) });
+  });
+
+  // ---------------------------------------------------------- storyboard
+
+  const shotFields = {
+    scene: z.number().int().positive().describe('Numero della scena'),
+    sceneTitle: z.string().optional().describe('Titolo della scena (vale per tutte le sue inquadrature)'),
+    size: z.enum(SIZES).optional().describe('Campo: EWS campo lunghissimo, WS campo lungo, MS piano medio, MCU primo piano largo, CU primo piano, ECU dettaglio, INS inserto'),
+    move: z.enum(MOVES).optional(),
+    lens: z.string().optional().describe('Ottica, es. "35mm"'),
+    description: z.string().describe('Cosa si vede: azione e inquadratura'),
+    audio: z.string().optional().describe('Dialoghi, suono, musica'),
+    duration: z.number().min(0).optional().describe('Durata stimata in secondi'),
+    notes: z.string().optional(),
+  };
+
+  reg('list_storyboards', {
+    title: 'Elenco storyboard',
+    description: 'Elenca le storyboard (shot list) con numero di scene e inquadrature. Senza projectId le elenca tutte.',
+    inputSchema: { projectId: z.string().optional() },
+    annotations: readOnly,
+  }, async ({ projectId }) => {
+    const q = projectId ? col('shotlists').where('projectId', '==', projectId) : col('shotlists');
+    const [lists, shots] = await Promise.all([q.get(), all('shots')]);
+    return text(lists.docs.map(d => {
+      const own = shots.filter(s => s.shotlistId === d.id);
+      return { id: d.id, ...d.data(), scenes: new Set(own.map(s => s.scene)).size, shots: own.length };
+    }));
+  });
+
+  reg('get_storyboard', {
+    title: 'Leggi storyboard',
+    description: 'Restituisce una storyboard con tutte le inquadrature in ordine e i loro codici (1A, 1B, 2A…). Le immagini non sono incluse.',
+    inputSchema: { storyboardId: z.string() },
+    annotations: readOnly,
+  }, async ({ storyboardId }) => {
+    const list = await one('shotlists', storyboardId);
+    if (!list) return fail('Storyboard non trovata.');
+    const shots = (await col('shots').where('shotlistId', '==', storyboardId).get()).docs.map(d => ({ id: d.id, ...d.data() }));
+    return text({ ...list, shots: withCodes(shots).map(({ shotlistId, projectId, ...rest }) => rest) });
+  });
+
+  reg('create_storyboard', {
+    title: 'Crea storyboard',
+    description: 'Crea una storyboard vuota per un progetto. Poi aggiungi le inquadrature con add_shots.',
+    inputSchema: { projectId: z.string(), title: z.string().optional(), aspect: z.enum(ASPECTS).optional().describe('Formato, default 16:9') },
+    annotations: writes,
+  }, async ({ projectId, title = 'Storyboard', aspect = '16:9' }) => {
+    const project = await one('projects', projectId);
+    if (!project) return fail('Progetto non trovato.');
+    const id = randomUUID();
+    const now = nowIso();
+    await col('shotlists').doc(id).set({ projectId, title, aspect, createdAt: now, updatedAt: now });
+    await log('create_storyboard', `Creata la storyboard "${title}" per "${project.name}"`);
+    return text({ id, title, aspect });
+  });
+
+  reg('add_shots', {
+    title: 'Aggiungi inquadrature',
+    description: 'Aggiunge inquadrature in fondo a una storyboard, nell\'ordine dato. I codici (1A, 1B…) si calcolano da scena e ordine. Massimo 100 per chiamata.',
+    inputSchema: { storyboardId: z.string(), shots: z.array(z.object(shotFields)).min(1).max(100) },
+    annotations: writes,
+  }, async ({ storyboardId, shots }) => {
+    const list = await one('shotlists', storyboardId);
+    if (!list) return fail('Storyboard non trovata.');
+    const existing = (await col('shots').where('shotlistId', '==', storyboardId).get()).docs.map(d => d.data());
+    let order = Math.max(0, ...existing.map(s => s.order || 0));
+    const batch = db.batch();
+    shots.forEach(s => {
+      order += 1;
+      const data = Object.fromEntries(Object.entries({ ...s, shotlistId: storyboardId, projectId: list.projectId, order, done: false, hasImage: false }).filter(([, v]) => v !== undefined));
+      batch.set(col('shots').doc(randomUUID()), data);
+    });
+    batch.update(col('shotlists').doc(storyboardId), { updatedAt: nowIso() });
+    await batch.commit();
+    await log('add_shots', `Aggiunte ${shots.length} inquadrature alla storyboard "${list.title}"`);
+    return text({ storyboardId, added: shots.length });
+  });
+
+  reg('update_shot', {
+    title: 'Modifica inquadratura',
+    description: 'Modifica i campi di un\'inquadratura (non l\'immagine). Per spostarla in un\'altra scena cambia "scene".',
+    inputSchema: { shotId: z.string(), ...Object.fromEntries(Object.entries(shotFields).map(([k, v]) => [k, v.optional()])), done: z.boolean().optional().describe('Girata') },
+    annotations: writes,
+  }, async ({ shotId, ...changes }) => {
+    const shot = await one('shots', shotId);
+    if (!shot) return fail('Inquadratura non trovata.');
+    const update = Object.fromEntries(Object.entries(changes).filter(([, v]) => v !== undefined));
+    if (!Object.keys(update).length) return fail('Nessuna modifica indicata.');
+    await col('shots').doc(shotId).update(update);
+    await log('update_shot', `Modificata un'inquadratura della scena ${update.scene ?? shot.scene}`);
+    return text({ id: shotId, ...update });
   });
 }

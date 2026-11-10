@@ -24,7 +24,7 @@ import {
   DocumentData,
   WriteBatch,
 } from "firebase/firestore";
-import { AppData, BusinessProfile, Client, ClaudeActivity, DocumentRevision, Project, Quote, TextDocument, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
+import { AppData, BusinessProfile, Client, ClaudeActivity, DocumentRevision, Project, Quote, Shot, ShotImage, Shotlist, TextDocument, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
 
 /*
  * Struttura dati (schemaVersion 2):
@@ -36,6 +36,9 @@ import { AppData, BusinessProfile, Client, ClaudeActivity, DocumentRevision, Pro
  *   users/{uid}/quotes/{id}      -> Quote (preventivi, legati a un progetto)
  *   users/{uid}/documents/{id}   -> TextDocument (soggetti, trattamenti, note: testo Markdown)
  *   users/{uid}/revisions/{id}   -> DocumentRevision (versioni precedenti dei documenti)
+ *   users/{uid}/shotlists/{id}   -> Shotlist (storyboard di un progetto)
+ *   users/{uid}/shots/{id}       -> Shot (inquadrature)
+ *   users/{uid}/shotImages/{id}  -> ShotImage (immagine dell'inquadratura, JPEG ridotto; non incluso nei backup)
  *   users/{uid}/activity/{id}    -> ClaudeActivity (registro delle azioni di Claude)
  *   mcpTokens/{sha256}           -> { uid } collegamenti del connettore Claude (solo l'hash del segreto)
  *   users/{uid}/settings/profile -> BusinessProfile (dati di chi emette i preventivi)
@@ -45,9 +48,9 @@ import { AppData, BusinessProfile, Client, ClaudeActivity, DocumentRevision, Pro
  */
 
 export const SCHEMA_VERSION = 2;
-export type CollectionName = 'clients' | 'projects' | 'todos' | 'quotes' | 'documents' | 'revisions';
+export type CollectionName = 'clients' | 'projects' | 'todos' | 'quotes' | 'documents' | 'revisions' | 'shotlists' | 'shots' | 'shotImages';
 type DataKey = keyof AppData;
-const COLLECTIONS: DataKey[] = ['clients', 'projects', 'todos', 'quotes', 'documents'];
+const COLLECTIONS: DataKey[] = ['clients', 'projects', 'todos', 'quotes', 'documents', 'shotlists', 'shots'];
 
 const userDocRef = (uid: string) => doc(db, 'users', uid);
 const colRef = (uid: string, name: CollectionName | 'activity') => collection(db, 'users', uid, name);
@@ -121,6 +124,8 @@ const sorters: { [K in DataKey]: (items: any[]) => AppData[K] } = {
   todos: sortTodos,
   quotes: sortQuotes,
   documents: (items: TextDocument[]) => [...items].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')),
+  shotlists: (items: Shotlist[]) => [...items].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || '')),
+  shots: (items: Shot[]) => [...items].sort((a, b) => a.order - b.order),
 };
 
 // --- Scrittura di un insieme completo di dati nelle sottocollezioni ---
@@ -143,6 +148,8 @@ const asArrays = (raw: any): AppData => ({
   todos: Array.isArray(raw?.todos) ? raw.todos : [],
   quotes: Array.isArray(raw?.quotes) ? raw.quotes : [],
   documents: Array.isArray(raw?.documents) ? raw.documents : [],
+  shotlists: Array.isArray(raw?.shotlists) ? raw.shotlists : [],
+  shots: Array.isArray(raw?.shots) ? raw.shots : [],
 });
 
 /**
@@ -270,6 +277,15 @@ export const listRevisions = async (uid: string, documentId: string): Promise<Do
     .map(d => ({ ...d.data(), id: d.id }) as DocumentRevision)
     .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 };
+
+// --- Immagini delle inquadrature (caricate solo nella pagina della storyboard) ---
+
+export const subscribeShotImages = (uid: string, shotlistId: string, onImages: (images: Map<string, string>) => void, onError: (e: Error) => void) =>
+  onSnapshot(query(colRef(uid, 'shotImages'), where('shotlistId', '==', shotlistId)), snap =>
+    onImages(new Map(snap.docs.map(d => [d.id, (d.data() as ShotImage).dataUrl]))), onError);
+
+export const listShotImageIds = async (uid: string, shotlistId: string): Promise<string[]> =>
+  (await getDocs(query(colRef(uid, 'shotImages'), where('shotlistId', '==', shotlistId)))).docs.map(d => d.id);
 
 // --- Connettore Claude ---
 

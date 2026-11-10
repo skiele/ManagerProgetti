@@ -1,13 +1,18 @@
-# Pubblica l'app su Firebase Hosting (https://progetta-800ca.web.app)
-# ogni volta che il codice arriva sul branch main, ad esempio con il Merge di una pull request.
-# Si può anche avviare a mano: GitHub → Actions → "Pubblica l'app" → Run workflow.
+# Pubblica Progetta su Firebase ogni volta che il codice arriva sul branch main
+# (ad esempio con il Merge di una pull request). Si può anche avviare a mano:
+# GitHub → Actions → "Pubblica l'app" → Run workflow.
+#
+# Pubblica tre cose, in quest'ordine:
+#   1. il sito (Firebase Hosting)
+#   2. il connettore Claude (Cloud Functions)
+#   3. le regole di sicurezza di Firestore
+# Se il passo 2 o 3 fallisce, il sito è comunque già aggiornato.
 #
 # Richiede il secret FIREBASE_SERVICE_ACCOUNT (Settings → Secrets and variables → Actions):
-# la chiave JSON di un account di servizio Google Cloud con i ruoli
-# Firebase Hosting Admin, Cloud Run Viewer, Cloud Functions Viewer e API Keys Viewer.
-#
-# Pubblica solo il sito. Regole di sicurezza e connettore Claude cambiano di rado
-# e restano da pubblicare a mano (vedi README).
+# la chiave JSON dell'account di servizio github-deploy, con i ruoli
+#   Firebase Hosting Admin, Cloud Run Viewer, Cloud Functions Viewer, API Keys Viewer  (sito)
+#   Cloud Functions Admin, Service Account User                                        (connettore)
+#   Firebase Rules Admin                                                               (regole)
 
 name: Pubblica l'app
 
@@ -17,7 +22,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-hosting
+  group: deploy
   cancel-in-progress: false
 
 jobs:
@@ -32,8 +37,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Installa le dipendenze
+      - name: Installa le dipendenze dell'app
         run: npm install --no-audit --no-fund
+
+      - name: Installa le dipendenze del connettore
+        run: npm ci --prefix functions --no-audit --no-fund
 
       - name: Accedi a Google Cloud
         uses: google-github-actions/auth@v2
@@ -41,5 +49,9 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
       # La compilazione (npm run build) la esegue firebase.json prima della pubblicazione
-      - name: Pubblica su Firebase Hosting
+      - name: Pubblica il sito
         run: npx --yes firebase-tools@15 deploy --only hosting --project progetta-800ca --non-interactive
+
+      # --force: conferma da solo le domande del deploy (nessuna funzione viene eliminata: c'è solo "mcp")
+      - name: Pubblica il connettore Claude e le regole di sicurezza
+        run: npx --yes firebase-tools@15 deploy --only functions,firestore:rules --project progetta-800ca --non-interactive --force

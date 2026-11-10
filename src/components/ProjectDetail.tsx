@@ -7,7 +7,7 @@ import StatusChip from './StatusChip';
 import TodoItem from './TodoItem';
 import PageHeader from './PageHeader';
 
-export type ProjectTab = 'overview' | 'tasks' | 'payments' | 'quotes' | 'documents';
+export type ProjectTab = 'overview' | 'tasks' | 'payments' | 'quotes' | 'documents' | 'storyboard';
 
 interface ProjectDetailProps {
   project: Project;
@@ -17,6 +17,8 @@ interface ProjectDetailProps {
   quotesCount?: number;
   documentsTab?: React.ReactNode;
   documentsCount?: number;
+  storyboardTab?: React.ReactNode;
+  storyboardCount?: number;
   onBack: () => void;
   onUpdateProjectWorkStatus: (id: string, status: WorkStatus) => void;
   onUpdateProjectPaymentStatus: (id: string, status: PaymentStatus) => void;
@@ -39,7 +41,7 @@ const Stat: React.FC<{ label: string; value: string; className?: string; first?:
 );
 
 const ProjectDetail: React.FC<ProjectDetailProps> = ({
-  project, client, todos, quotesTab, quotesCount = 0, documentsTab, documentsCount = 0, onBack,
+  project, client, todos, quotesTab, quotesCount = 0, documentsTab, documentsCount = 0, storyboardTab, storyboardCount = 0, onBack,
   onUpdateProjectWorkStatus, onUpdateProjectPaymentStatus, onUpdateProjectPriority, onUpdateProjectNotes,
   onEditProject, onDeleteProject, onToggleTodo, onDeleteTodo, onAddTodo, onAddPayment, onDeletePayment,
 }) => {
@@ -62,6 +64,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
     { id: 'payments', label: 'Pagamenti', count: payments.length },
     ...(quotesTab ? [{ id: 'quotes' as ProjectTab, label: 'Preventivi', count: quotesCount }] : []),
     ...(documentsTab ? [{ id: 'documents' as ProjectTab, label: 'Documenti', count: documentsCount }] : []),
+    ...(storyboardTab ? [{ id: 'storyboard' as ProjectTab, label: 'Storyboard', count: storyboardCount }] : []),
   ];
 
   return (
@@ -173,6 +176,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {tab === 'quotes' && quotesTab}
       {tab === 'documents' && documentsTab}
+      {tab === 'storyboard' && storyboardTab}
     </div>
   );
 };
