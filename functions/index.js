@@ -7,6 +7,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { registerTools } from './tools.js';
+import { buildCalendar } from './calendar.js';
 
 initializeApp();
 const db = getFirestore();
@@ -16,9 +17,29 @@ const INSTRUCTIONS = `Progetta è il gestionale di un filmmaker indipendente in 
 - Per ritocchi usa edit_document (sostituzioni puntuali), per riscritture complete update_document.
 - I preventivi creati sono bozze: l'utente li invia e li accetta dall'app. Niente IVA (forfettario).
 - Per una storyboard da un testo: create_storyboard, poi add_shots con le inquadrature in ordine. Non puoi disegnare le immagini dei fotogrammi.
+- Lo stato "opportunità" indica trattative incerte: non vanno sommate agli incassi attesi.
 - Non puoi eliminare dati né registrare pagamenti.`;
 
 const sha256 = text => createHash('sha256').update(text).digest('hex');
+
+// Calendario per Google Calendar ("Aggiungi da URL"): https://<sito>/cal/<segreto>.ics
+// Il segreto si genera in Impostazioni → Calendario ed è separato da quello di Claude.
+const serveCalendar = async (req, res) => {
+  const token = (req.path.split('/').filter(Boolean).pop() || '').replace(/\.ics$/, '');
+  if (token.length < 32) { res.status(404).send('Calendario non trovato.'); return; }
+  const link = await db.collection('calendarTokens').doc(sha256(token)).get();
+  if (!link.exists) { res.status(404).send('Calendario non trovato o revocato.'); return; }
+  try {
+    const appUrl = `https://${req.get('x-forwarded-host') || req.get('host') || ''}`;
+    const ics = await buildCalendar(db, link.data().uid, appUrl);
+    res.set('Content-Type', 'text/calendar; charset=utf-8');
+    res.set('Cache-Control', 'private, max-age=900');
+    res.send(ics);
+  } catch (e) {
+    console.error('Errore calendario', e);
+    res.status(500).send('Errore interno.');
+  }
+};
 
 const jsonRpcError = (res, status, message) =>
   res.status(status).json({ jsonrpc: '2.0', error: { code: -32000, message }, id: null });
@@ -26,6 +47,9 @@ const jsonRpcError = (res, status, message) =>
 export const mcp = onRequest(
   { region: 'us-central1', maxInstances: 2, timeoutSeconds: 60, memory: '256MiB' },
   async (req, res) => {
+    // Calendario delle scadenze (sola lettura), servito dalla stessa funzione: /cal/<segreto>.ics
+    if (req.path.includes('/cal/')) return serveCalendar(req, res);
+
     // Il segreto è l'ultimo segmento del percorso: /mcp/<segreto>
     const token = req.path.split('/').filter(Boolean).pop() || '';
     if (token.length < 32) return jsonRpcError(res, 401, 'Collegamento non valido.');
@@ -54,3 +78,4 @@ export const mcp = onRequest(
     }
   },
 );
+

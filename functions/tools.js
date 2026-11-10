@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
-const WORK = ['preventivo da inviare', 'preventivo inviato', 'in lavorazione', 'consegnato', 'annullato'];
+const WORK = ['opportunità', 'preventivo da inviare', 'preventivo inviato', 'in lavorazione', 'consegnato', 'annullato'];
 const PRIORITY = ['bassa', 'media', 'alta'];
 const KINDS = ['soggetto', 'trattamento', 'sceneggiatura', 'note', 'altro'];
 const ASPECTS = ['16:9', '2.39:1', '4:3', '1:1', '4:5', '9:16'];
@@ -87,7 +87,7 @@ export function registerTools(server, db, uid) {
     title: 'Elenco progetti',
     description: 'Elenca i progetti con cliente, valori economici e stati. Per default solo quelli attivi (non annullati e non consegnati+pagati).',
     inputSchema: {
-      filter: z.enum(['attivi', 'tutti', 'conclusi', 'annullati']).optional().describe('Default: attivi'),
+      filter: z.enum(['attivi', 'opportunità', 'tutti', 'conclusi', 'annullati']).optional().describe('Default: attivi (esclude le opportunità, cioè le trattative incerte)'),
       clientId: z.string().optional(),
     },
     annotations: readOnly,
@@ -99,7 +99,8 @@ export function registerTools(server, db, uid) {
       filter === 'tutti' ? true :
       filter === 'conclusi' ? done(p) :
       filter === 'annullati' ? p.workStatus === 'annullato' :
-      p.workStatus !== 'annullato' && !done(p));
+      filter === 'opportunità' ? p.workStatus === 'opportunità' :
+      p.workStatus !== 'annullato' && p.workStatus !== 'opportunità' && !done(p));
     const incomeBy = new Map();
     todos.forEach(t => incomeBy.set(t.projectId, (incomeBy.get(t.projectId) || 0) + (t.income || 0)));
     return text(projects.filter(keep).map(p => describeProject(p, clientsById, p.value + (incomeBy.get(p.id) || 0))));
@@ -178,19 +179,20 @@ export function registerTools(server, db, uid) {
 
   reg('create_project', {
     title: 'Crea progetto',
-    description: 'Crea un progetto per un cliente esistente. Stato iniziale: "preventivo da inviare", "da fatturare".',
+    description: 'Crea un progetto per un cliente esistente. Stato iniziale: "preventivo da inviare", "da fatturare"; con opportunity=true lo stato è "opportunità" (trattativa incerta, esclusa da incassi e grafici).',
     inputSchema: {
       clientId: z.string(), name: z.string().min(1),
       value: z.number().min(0).optional().describe('Valore in euro, default 0'),
       notes: z.string().optional(), priority: z.enum(PRIORITY).optional(),
+      opportunity: z.boolean().optional().describe('Trattativa incerta (default no)'),
     },
     annotations: writes,
-  }, async ({ clientId, name, value = 0, notes, priority = 'media' }) => {
+  }, async ({ clientId, name, value = 0, notes, priority = 'media', opportunity = false }) => {
     const client = await one('clients', clientId);
     if (!client) return fail('Cliente non trovato.');
     const id = randomUUID();
     await col('projects').doc(id).set({
-      clientId, name, value, workStatus: 'preventivo da inviare', paymentStatus: 'da fatturare',
+      clientId, name, value, workStatus: opportunity ? 'opportunità' : 'preventivo da inviare', paymentStatus: 'da fatturare',
       priority, createdAt: nowIso(), payments: [], ...(notes ? { notes } : {}),
     });
     await log('create_project', `Creato il progetto "${name}" per ${client.name}`);

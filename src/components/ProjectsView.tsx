@@ -4,7 +4,7 @@ import { workStatusConfig, paymentStatusConfig, projectPriorityConfig, tagClass 
 import { formatCurrency, formatCurrencyShort } from '../utils/formatting';
 import PageHeader from './PageHeader';
 
-type Filter = 'active' | 'all' | 'done' | 'cancelled';
+type Filter = 'active' | 'opportunities' | 'all' | 'done' | 'cancelled';
 
 interface ProjectsViewProps {
   projects: Project[];
@@ -19,6 +19,8 @@ const priorityRank: Record<ProjectPriority, number> = { [ProjectPriority.Alta]: 
 export const isProjectDone = (p: Project) => p.workStatus === WorkStatus.Consegnato && p.paymentStatus === PaymentStatus.Pagato;
 // Chiuso = consegnato e pagato, oppure annullato: va in fondo e in secondo piano
 export const isProjectClosed = (p: Project) => isProjectDone(p) || p.workStatus === WorkStatus.Annullato;
+// Ordine di presentazione: in corso, opportunità, chiusi
+const rank = (p: Project) => isProjectClosed(p) ? 2 : p.workStatus === WorkStatus.Opportunita ? 1 : 0;
 
 const Badge: React.FC<{ color: string; label: string }> = ({ color, label }) => (
   <span className={`${tagClass} ${color}`}>{label}</span>
@@ -94,7 +96,7 @@ export const ProjectTile: React.FC<{ project: Project; overline: string; total: 
   return (
     <li className="flex">
       <button onClick={() => onOpen(p.id)} aria-label={`Apri progetto ${p.name}`}
-        className={`group w-full text-left flex flex-col border-2 border-foreground bg-card hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_hsl(var(--foreground))] transition ${closed ? 'opacity-50 hover:opacity-100 border-foreground/40' : ''}`}>
+        className={`group w-full text-left flex flex-col border-2 border-foreground bg-card hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_hsl(var(--foreground))] transition ${closed ? 'opacity-50 hover:opacity-100 border-foreground/40' : ''} ${p.workStatus === WorkStatus.Opportunita ? 'border-dashed' : ''}`}>
         <span aria-hidden="true" className={`h-1.5 w-full ${priorityBar}`}></span>
         <span className="flex flex-col flex-1 p-5 gap-4">
           <span>
@@ -141,17 +143,20 @@ const ProjectsView: React.FC<ProjectsViewProps> = ({ projects, clients, projectT
     return projects
       .filter(p => {
         const cancelled = p.workStatus === WorkStatus.Annullato;
-        if (filter === 'active' && (cancelled || isProjectDone(p))) return false;
+        const opportunity = p.workStatus === WorkStatus.Opportunita;
+        if (filter === 'active' && (cancelled || isProjectDone(p) || opportunity)) return false;
+        if (filter === 'opportunities' && !opportunity) return false;
         if (filter === 'done' && !isProjectDone(p)) return false;
         if (filter === 'cancelled' && !cancelled) return false;
         if (!q) return true;
         return p.name.toLowerCase().includes(q) || (clientName.get(p.clientId) || '').toLowerCase().includes(q);
       })
-      .sort((a, b) => Number(isProjectClosed(a)) - Number(isProjectClosed(b)) || priorityRank[a.priority] - priorityRank[b.priority] || b.createdAt.localeCompare(a.createdAt));
+      .sort((a, b) => rank(a) - rank(b) || priorityRank[a.priority] - priorityRank[b.priority] || b.createdAt.localeCompare(a.createdAt));
   }, [projects, filter, search, clientName]);
 
   const filters: { id: Filter; label: string }[] = [
     { id: 'active', label: 'Attivi' },
+    { id: 'opportunities', label: 'Opportunità' },
     { id: 'done', label: 'Conclusi' },
     { id: 'cancelled', label: 'Annullati' },
     { id: 'all', label: 'Tutti' },

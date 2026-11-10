@@ -6,8 +6,10 @@ const SOLID = 'bg-foreground text-background border border-foreground';
 const OUTLINE = 'bg-transparent text-foreground border border-foreground';
 const MUTED = 'bg-muted text-muted-foreground border border-muted';
 const SIGNAL = 'bg-signal text-black border border-signal';
+const DASHED = 'bg-transparent text-muted-foreground border border-dashed border-foreground';
 
 export const workStatusConfig: Record<WorkStatus, { color: string; label: string }> = {
+  [WorkStatus.Opportunita]: { color: DASHED, label: 'Opportunità' },
   [WorkStatus.PreventivoDaInviare]: { color: OUTLINE, label: 'Preventivo da inviare' },
   [WorkStatus.PreventivoInviato]: { color: OUTLINE, label: 'Preventivo inviato' },
   [WorkStatus.InLavorazione]: { color: SOLID, label: 'In lavorazione' },

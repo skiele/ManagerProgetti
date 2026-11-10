@@ -86,6 +86,13 @@ const Dashboard: React.FC<DashboardProps> = ({
     .filter(r => r.remaining > 0)
     .sort((a, b) => b.remaining - a.remaining), [projects, projectTotals]);
 
+  // Opportunità: trattative incerte, mostrate a parte e mai sommate agli incassi
+  const opportunities = useMemo(() => projects
+    .filter(p => p.workStatus === WorkStatus.Opportunita)
+    .map(p => ({ project: p, total: projectTotals.get(p.id) ?? p.value }))
+    .sort((a, b) => b.total - a.total), [projects, projectTotals]);
+  const opportunitiesTotal = opportunities.reduce((s, o) => s + o.total, 0);
+
   const quoteCount = projects.filter(p => p.workStatus === WorkStatus.PreventivoDaInviare || p.workStatus === WorkStatus.PreventivoInviato).length;
   const collectedCount = projects.filter(p => (p.payments || []).some(pay => {
     const d = new Date(pay.date);
@@ -174,6 +181,30 @@ const Dashboard: React.FC<DashboardProps> = ({
           </ul>
         </section>
       </div>
+
+      {opportunities.length > 0 && (
+        <section aria-labelledby="dash-opportunities" className="mb-10">
+          <div className="flex flex-wrap justify-between items-baseline gap-3 pb-2 border-b-2 border-dashed border-foreground">
+            <h2 id="dash-opportunities" className="text-xl font-extrabold tracking-[-0.02em]">
+              Opportunità <span className="text-muted-foreground font-medium">· {opportunities.length} · {euro(opportunitiesTotal)}</span>
+            </h2>
+            <span className="text-[12px] text-muted-foreground">Trattative incerte: non contano negli incassi né nel grafico</span>
+          </div>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-10">
+            {opportunities.map(o => (
+              <li key={o.project.id} className="border-b border-foreground/15">
+                <button onClick={() => onOpenProject(o.project.id)} className="w-full grid grid-cols-[1fr_auto] gap-3 items-baseline py-3 text-left hover:bg-muted/60">
+                  <span className="min-w-0">
+                    <span className="block font-semibold truncate">{o.project.name}</span>
+                    <span className="block mt-0.5 text-[13px] text-muted-foreground truncate">{clientName.get(o.project.clientId) ?? ''}</span>
+                  </span>
+                  <span className="font-extrabold text-muted-foreground">{euro(o.total)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section aria-labelledby="dash-clients">
         <div className="flex flex-wrap justify-between items-baseline gap-3 pb-2 border-b-2 border-foreground">

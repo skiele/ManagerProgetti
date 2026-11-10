@@ -298,20 +298,26 @@ const sha256Hex = async (text: string) => {
 };
 
 export interface ClaudeLink { id: string; label: string; createdAt: string }
+export type LinkKind = 'mcpTokens' | 'calendarTokens';
 
-/** Crea un nuovo segreto per il connettore. Su Firestore viene salvato solo l'hash. */
-export const createClaudeLink = async (uid: string, label: string): Promise<string> => {
+/** Crea un nuovo segreto (Claude o calendario). Su Firestore viene salvato solo l'hash. */
+export const createLink = async (kind: LinkKind, uid: string, label: string): Promise<string> => {
   const token = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
-  await setDoc(doc(db, 'mcpTokens', await sha256Hex(token)), { uid, label, createdAt: new Date().toISOString() });
+  await setDoc(doc(db, kind, await sha256Hex(token)), { uid, label, createdAt: new Date().toISOString() });
   return token;
 };
 
-export const subscribeClaudeLinks = (uid: string, onLinks: (links: ClaudeLink[]) => void, onError: (e: Error) => void) =>
-  onSnapshot(query(collection(db, 'mcpTokens'), where('uid', '==', uid)), snap =>
+export const subscribeLinks = (kind: LinkKind, uid: string, onLinks: (links: ClaudeLink[]) => void, onError: (e: Error) => void) =>
+  onSnapshot(query(collection(db, kind), where('uid', '==', uid)), snap =>
     onLinks(snap.docs.map(d => ({ id: d.id, label: d.data().label, createdAt: d.data().createdAt }))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))), onError);
 
-export const revokeClaudeLink = (id: string) => deleteDoc(doc(db, 'mcpTokens', id));
+export const revokeLink = (kind: LinkKind, id: string) => deleteDoc(doc(db, kind, id));
+
+// Nomi storici, usati dalla sezione Claude
+export const createClaudeLink = (uid: string, label: string) => createLink('mcpTokens', uid, label);
+export const subscribeClaudeLinks = (uid: string, onLinks: (links: ClaudeLink[]) => void, onError: (e: Error) => void) => subscribeLinks('mcpTokens', uid, onLinks, onError);
+export const revokeClaudeLink = (id: string) => revokeLink('mcpTokens', id);
 
 export const subscribeClaudeActivity = (uid: string, onItems: (items: ClaudeActivity[]) => void, onError: (e: Error) => void) =>
   onSnapshot(query(colRef(uid, 'activity'), orderBy('at', 'desc'), limit(30)), snap =>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Client, Project, Todo } from '../types';
+import { Client, Project, Todo, WorkStatus } from '../types';
 import { SparklesIcon, TrashIcon } from './icons';
 import PageHeader from './PageHeader';
 import { isProjectClosed, LayoutToggle, ProjectRow, ProjectTile, projectGridClass, useProjectLayout } from './ProjectsView';
@@ -18,7 +18,9 @@ interface ClientViewProps {
 const ClientView: React.FC<ClientViewProps> = ({ client, projects, projectTotals, todos, onOpenProject, onAiAddProject, onDeleteClient }) => {
     const [layout, setLayout] = useProjectLayout();
     const sorted = [...projects].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    const open = sorted.filter(p => !isProjectClosed(p));
+    const isOpportunity = (p: Project) => p.workStatus === WorkStatus.Opportunita;
+    const open = sorted.filter(p => !isProjectClosed(p) && !isOpportunity(p));
+    const opportunities = sorted.filter(isOpportunity);
     const closed = sorted.filter(isProjectClosed);
     const created = (p: Project) => `Creato il ${new Date(p.createdAt).toLocaleDateString('it-IT')}`;
     const renderGroup = (list: Project[]) => layout === 'grid'
@@ -53,6 +55,15 @@ const ClientView: React.FC<ClientViewProps> = ({ client, projects, projectTotals
                     {open.length > 0
                         ? renderGroup(open)
                         : <p className="py-6 text-muted-foreground border-t-2 border-foreground">Nessun progetto in corso.</p>}
+                    {opportunities.length > 0 && (
+                        <section aria-labelledby="client-opportunities" className="mt-14">
+                            <h2 id="client-opportunities" className="flex items-baseline justify-between pb-2 mb-6 border-b border-dashed border-foreground">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.12em]">Opportunità · non contano negli incassi</span>
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.12em]">{opportunities.length}</span>
+                            </h2>
+                            {renderGroup(opportunities)}
+                        </section>
+                    )}
                     {closed.length > 0 && (
                         <section aria-labelledby="closed-projects" className="mt-14">
                             <h2 id="closed-projects" className="flex items-baseline justify-between pb-2 mb-6 border-b border-foreground/40 text-muted-foreground">

@@ -18,6 +18,13 @@
         }
       },
       {
+        "source": "/cal/**",
+        "function": {
+          "functionId": "mcp",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

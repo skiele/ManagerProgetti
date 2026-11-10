@@ -9,7 +9,7 @@ interface EntityFormProps {
   clients: Client[];
   projects: Project[];
   onAddClient: (name: string, email?: string) => void;
-  onAddProject: (clientId: string, name: string, value: number) => void;
+  onAddProject: (clientId: string, name: string, value: number, isOpportunity: boolean) => void;
   onUpdateProject: (projectId: string, data: { name: string; value: number }) => void;
   onAddTodo: (projectId: string, task: string, income: number, dueDate?: string) => void;
   onAddPayment: (projectId: string, amount: number, date: string) => void;
@@ -30,6 +30,7 @@ const EntityForm: React.FC<EntityFormProps> = ({
   const [email, setEmail] = useState('');
   const [clientId, setClientId] = useState(type === 'project' ? contextId ?? '' : '');
   const [projectValue, setProjectValue] = useState(projectToEdit?.value ?? 0);
+  const [isOpportunity, setIsOpportunity] = useState(false);
   const [task, setTask] = useState('');
   const [income, setIncome] = useState(0);
   const [dueDate, setDueDate] = useState('');
@@ -41,7 +42,7 @@ const EntityForm: React.FC<EntityFormProps> = ({
     if (type === 'client' && name) {
       onAddClient(name, email || undefined);
     } else if (type === 'project' && name && clientId) {
-      onAddProject(clientId, name, projectValue);
+      onAddProject(clientId, name, projectValue, isOpportunity);
     } else if (type === 'editProject' && name && contextId) {
       onUpdateProject(contextId, { name, value: projectValue });
     } else if (type === 'todo' && task && contextId) {
@@ -72,6 +73,12 @@ const EntityForm: React.FC<EntityFormProps> = ({
           )}
           <input type="text" placeholder="Nome Progetto" value={name} onChange={e => setName(e.target.value)} required />
           <input type="number" placeholder="Valore Progetto (€)" value={projectValue} onChange={e => setProjectValue(Number(e.target.value))} required />
+          {type === 'project' && (
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={isOpportunity} onChange={e => setIsOpportunity(e.target.checked)} className="mt-0.5 h-4 w-4 accent-black dark:accent-white" />
+              <span><strong>È un'opportunità</strong><br /><span className="text-muted-foreground">Trattativa incerta: non conta negli incassi e nei grafici finché non la passi a preventivo.</span></span>
+            </label>
+          )}
         </>;
       case 'todo':
         return <>
