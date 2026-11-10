@@ -32,20 +32,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }) => {
   };
 
   return (
-    <div className="flex items-center justify-center h-screen bg-light dark:bg-gray-900">
-      <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-lg shadow-2xl">
+    <div className="flex items-center justify-center h-screen bg-background">
+      <div className="w-full max-w-md p-8 space-y-8 bg-card rounded-lg shadow-2xl">
         <div className="text-center">
             <img src="/logo.svg" alt="Progetta Logo" className="w-12 h-12 mx-auto"/>
-            <h1 className="mt-4 text-3xl font-bold text-gray-800 dark:text-gray-100">
+            <h1 className="mt-4 text-3xl font-bold text-foreground">
                 Accesso a Progetta
             </h1>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-2 text-sm text-muted-foreground">
                 Bentornato! Inserisci le tue credenziali.
             </p>
         </div>
         <form className="space-y-6" onSubmit={handleLogin}>
           <div>
-            <label htmlFor="email" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+            <label htmlFor="email" className="text-sm font-semibold text-foreground">
               Email
             </label>
             <input
@@ -56,14 +56,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }) => {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-3 mt-1 border rounded-md dark:bg-gray-700 dark:border-gray-600 focus:ring-primary focus:border-primary"
+              className="w-full p-3 mt-1 border rounded-md focus:ring-primary focus:border-primary"
               disabled={loading}
             />
           </div>
           <div>
             <label
               htmlFor="password"
-              className="text-sm font-semibold text-gray-700 dark:text-gray-300"
+              className="text-sm font-semibold text-foreground"
             >
               Password
             </label>
@@ -75,7 +75,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }) => {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 mt-1 border rounded-md dark:bg-gray-700 dark:border-gray-600 focus:ring-primary focus:border-primary"
+              className="w-full p-3 mt-1 border rounded-md focus:ring-primary focus:border-primary"
               disabled={loading}
             />
           </div>
@@ -84,13 +84,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full px-4 py-3 font-semibold text-white bg-primary rounded-md hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors disabled:bg-gray-400"
+              className="w-full px-4 py-3 font-semibold text-white bg-primary rounded-md hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors disabled:bg-gray-400"
             >
               {loading ? 'Accesso in corso...' : 'Accedi'}
             </button>
           </div>
         </form>
-        <p className="mt-4 text-center text-sm text-gray-500 dark:text-gray-400">
+        <p className="mt-4 text-center text-sm text-muted-foreground">
             Non hai un account?{' '}
             <button onClick={onNavigateToRegister} className="font-semibold text-primary hover:underline focus:outline-none">
                 Registrati

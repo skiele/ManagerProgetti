@@ -112,13 +112,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userId, profile, onSaveProf
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
-      <h1 className="text-3xl font-bold mb-6 border-b pb-4 dark:border-gray-700">Impostazioni e Backup</h1>
+    <div className="bg-card p-6 rounded-lg shadow-md border border-muted">
+      <h1 className="text-3xl font-bold mb-6 border-b pb-4">Impostazioni e Backup</h1>
       
       <div className="space-y-8">
         <div>
           <h2 className="text-xl font-semibold">Dati per i preventivi</h2>
-          <p className="text-gray-500 dark:text-gray-400 mt-1 mb-3">
+          <p className="text-muted-foreground mt-1 mb-3">
             Compaiono nell'intestazione e in calce di ogni preventivo. La dicitura proposta è quella del regime forfettario: verificala con il tuo commercialista.
           </p>
           <ProfileForm profile={profile} onSave={onSaveProfile} />
@@ -131,7 +131,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userId, profile, onSaveProf
 
         <div>
           <h2 className="text-xl font-semibold">Esporta Dati</h2>
-          <p className="text-gray-500 dark:text-gray-400 mt-1 mb-3">
+          <p className="text-muted-foreground mt-1 mb-3">
             Crea un file di backup in formato JSON con clienti, progetti, attività, preventivi, documenti e i tuoi dati (le versioni precedenti dei documenti non sono incluse). Conservalo in un posto sicuro.
           </p>
           <button 
@@ -145,7 +145,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userId, profile, onSaveProf
 
         <div>
           <h2 className="text-xl font-semibold">Importa Dati</h2>
-          <p className="text-gray-500 dark:text-gray-400 mt-1 mb-3">
+          <p className="text-muted-foreground mt-1 mb-3">
             Ripristina i tuoi dati da un file di backup JSON. Questa azione sovrascriverà tutti i dati attuali.
           </p>
           <button 
@@ -159,7 +159,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userId, profile, onSaveProf
 
         <div className="mt-10 pt-6 border-t border-red-500/20">
           <h3 className="text-lg font-semibold text-red-500">Zona Pericolo</h3>
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="text-sm text-muted-foreground mt-2">
             L'importazione di un backup è un'azione permanente e non può essere annullata. Assicurati di aver selezionato il file corretto prima di procedere.
           </p>
         </div>

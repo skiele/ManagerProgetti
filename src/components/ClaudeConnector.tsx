@@ -38,13 +38,13 @@ const ClaudeConnector: React.FC<{ userId: string }> = ({ userId }) => {
 
   return (
     <div className="space-y-4">
-      <p className="text-gray-500 dark:text-gray-400">
+      <p className="text-muted-foreground">
         Collega Progetta a claude.ai per lavorare con Claude su progetti, documenti e preventivi.
         Claude può leggere e modificare i dati, ma non può eliminare nulla, registrare pagamenti o inviare/accettare preventivi.
         Prima di ogni sua modifica a un documento la versione precedente viene salvata.
       </p>
 
-      <ol className="list-decimal pl-5 text-sm space-y-1 text-gray-600 dark:text-gray-300">
+      <ol className="list-decimal pl-5 text-sm space-y-1 text-muted-foreground">
         <li>Genera un link qui sotto e copialo.</li>
         <li>Su claude.ai apri Impostazioni → Connettori → Aggiungi connettore personalizzato.</li>
         <li>Incolla il link come URL del server e dai un nome (es. "Progetta").</li>

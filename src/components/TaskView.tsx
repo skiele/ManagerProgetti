@@ -158,7 +158,7 @@ const TaskView: React.FC<TaskViewProps> = ({ todos, projects, clients, onToggleT
             <div className="mb-8">
                 <h3 className={`text-lg font-bold mb-4 flex items-center ${colorClass}`}>
                     {title} 
-                    <span className="ml-2 text-xs bg-muted px-2 py-0.5 rounded-full text-foreground font-normal border dark:border-gray-700">
+                    <span className="ml-2 text-xs bg-muted px-2 py-0.5 rounded-full text-foreground font-normal border">
                         {list.length}
                     </span>
                 </h3>
@@ -193,7 +193,7 @@ const TaskView: React.FC<TaskViewProps> = ({ todos, projects, clients, onToggleT
             {renderSection('Scaduti', groupedTodos.overdue, 'overdue', 'text-red-500')}
             {renderSection('Oggi', groupedTodos.today, 'today', 'text-green-500')}
             {renderSection('Prossimi', groupedTodos.upcoming, 'upcoming', 'text-blue-500')}
-            {renderSection('Senza Scadenza', groupedTodos.noDate, 'noDate', 'text-gray-500')}
+            {renderSection('Senza Scadenza', groupedTodos.noDate, 'noDate', 'text-muted-foreground')}
         </div>
     );
 };

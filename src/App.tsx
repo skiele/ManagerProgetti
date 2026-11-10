@@ -687,7 +687,7 @@ const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout,
         <div className="mt-auto pt-4 text-center text-xs text-muted-foreground flex-shrink-0">v1.7.0</div>
       </aside>
 
-      <main className="w-full md:flex-1 p-4 sm:p-8 overflow-y-auto mt-16 md:mt-0">
+      <main className="w-full md:flex-1 p-4 sm:p-8 pb-28 sm:pb-28 overflow-y-auto mt-16 md:mt-0 min-w-0">
         {selectedView === 'dashboard' && <Dashboard 
             collectedIncome={dashboardTotals.collected} 
             futureIncome={dashboardTotals.future}

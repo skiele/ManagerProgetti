@@ -36,11 +36,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
             <h1 className="text-3xl font-bold">Dashboard</h1>
             <div className="flex flex-col sm:flex-row gap-4">
-                <select value={filterYear} onChange={e => setFilterYear(e.target.value)}>
+                <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="sm:w-44" aria-label="Anno">
                     <option value="all">Tutti gli anni</option>
                     {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
                 </select>
-                <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}>
+                <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="sm:w-44" aria-label="Mese">
                     <option value="all">Tutti i mesi</option>
                     {Array.from({ length: 12 }, (_, i) => (
                         <option key={i + 1} value={String(i + 1)}>{new Date(0, i).toLocaleString('it-IT', { month: 'long' })}</option>
