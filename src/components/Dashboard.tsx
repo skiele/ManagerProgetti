@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Client, PaymentStatus, Project, Todo, WorkStatus } from '../types';
-import { formatCurrency } from '../utils/formatting';
+import { formatCurrencyShort } from '../utils/formatting';
 import { tagClass } from '../config/status';
 import PageHeader from './PageHeader';
 
@@ -31,7 +31,7 @@ interface DashboardProps {
   onNewProject: () => void;
 }
 
-const euro = (n: number) => formatCurrency(n).replace(/,00\s€$/, ' €');
+const euro = formatCurrencyShort;
 const todayIso = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -39,7 +39,7 @@ const todayIso = () => {
 const shortDate = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 
 const Kpi: React.FC<{ index: string; label: string; value: number; note: string; highlight?: boolean; first?: boolean }> = ({ index, label, value, note, highlight, first }) => {
-  const [whole] = euro(value).split(' €');
+  const whole = euro(value).replace(/\s?€$/, '');
   return (
     <div className={first ? 'pr-6' : 'sm:px-6 sm:border-l-2 border-foreground'}>
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em]">{index} · {label}</p>
