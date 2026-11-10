@@ -1,27 +1,81 @@
 import { auth, db } from '../firebaseConfig';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   User
 } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  onSnapshot,
+  writeBatch,
+  query,
+  where,
+  orderBy,
+  limit,
+  deleteDoc,
+  DocumentReference,
+  DocumentData,
+  WriteBatch,
+} from "firebase/firestore";
+import { AppData, BusinessProfile, Client, ClaudeActivity, DocumentRevision, Project, Quote, TextDocument, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
 
-type AppData = {
-  clients: Client[];
-  projects: Project[];
-  todos: Todo[];
+/*
+ * Struttura dati (schemaVersion 2):
+ *
+ *   users/{uid}                  -> { schemaVersion: 2, ... }  (metadati; i vecchi array restano come backup)
+ *   users/{uid}/clients/{id}     -> Client
+ *   users/{uid}/projects/{id}    -> Project (i pagamenti restano annidati nel progetto)
+ *   users/{uid}/todos/{id}       -> Todo
+ *   users/{uid}/quotes/{id}      -> Quote (preventivi, legati a un progetto)
+ *   users/{uid}/documents/{id}   -> TextDocument (soggetti, trattamenti, note: testo Markdown)
+ *   users/{uid}/revisions/{id}   -> DocumentRevision (versioni precedenti dei documenti)
+ *   users/{uid}/activity/{id}    -> ClaudeActivity (registro delle azioni di Claude)
+ *   mcpTokens/{sha256}           -> { uid } collegamenti del connettore Claude (solo l'hash del segreto)
+ *   users/{uid}/settings/profile -> BusinessProfile (dati di chi emette i preventivi)
+ *
+ * Ogni modifica scrive SOLO il documento interessato: niente più riscrittura dell'intero stato,
+ * niente limite di 1 MiB sul totale dei dati, niente sovrascritture con stato obsoleto.
+ */
+
+export const SCHEMA_VERSION = 2;
+export type CollectionName = 'clients' | 'projects' | 'todos' | 'quotes' | 'documents' | 'revisions';
+type DataKey = keyof AppData;
+const COLLECTIONS: DataKey[] = ['clients', 'projects', 'todos', 'quotes', 'documents'];
+
+const userDocRef = (uid: string) => doc(db, 'users', uid);
+const colRef = (uid: string, name: CollectionName | 'activity') => collection(db, 'users', uid, name);
+export const entityRef = (uid: string, name: CollectionName, id: string) => doc(db, 'users', uid, name, id);
+
+// Firestore accetta al massimo 500 operazioni per batch: spezza le scritture in blocchi.
+// NB: i blocchi non sono atomici tra loro, quindi va usato solo per operazioni idempotenti.
+class ChunkedBatch {
+  private ops: ((b: WriteBatch) => void)[] = [];
+  set(ref: DocumentReference, data: DocumentData) { this.ops.push(b => b.set(ref, data)); }
+  update(ref: DocumentReference, data: DocumentData) { this.ops.push(b => b.update(ref, data)); }
+  delete(ref: DocumentReference) { this.ops.push(b => b.delete(ref)); }
+  async commit() {
+    for (let i = 0; i < this.ops.length; i += 400) {
+      const batch = writeBatch(db);
+      this.ops.slice(i, i + 400).forEach(op => op(batch));
+      await batch.commit();
+    }
+  }
+}
+
+// Rimuove `id` dal payload: l'id è già il nome del documento.
+const withoutId = <T extends { id: string }>(entity: T) => {
+  const { id, ...rest } = entity;
+  return rest;
 };
 
-const initialData: AppData = {
-  clients: [],
-  projects: [],
-  todos: [],
-};
-
-// --- Funzioni di Migrazione (per dati legacy da localStorage) ---
+// --- Normalizzazione dei progetti (formati legacy) ---
 
 const mapOldStatus = (oldStatus: string) => {
     switch (oldStatus) {
@@ -35,128 +89,268 @@ const mapOldStatus = (oldStatus: string) => {
     }
 };
 
-const projectMigrator = (projectsData: any): Project[] => {
-  if (!Array.isArray(projectsData)) return [];
+const normalizeProject = (project: any): Project => {
+  let migrated: any = { ...project };
+  if (typeof project.status === 'string' && typeof project.workStatus === 'undefined') {
+    const { status: oldStatus, ...rest } = project;
+    migrated = { ...rest, ...mapOldStatus(oldStatus) };
+  }
+  if (typeof migrated.priority === 'undefined') {
+    migrated.priority = ProjectPriority.Media;
+  }
+  return migrated as Project;
+};
 
-  return projectsData.map(project => {
-    if (!project) return project;
+const isEntity = (x: any): boolean => !!x && typeof x === 'object' && typeof x.id === 'string' && x.id.length > 0;
 
-    let migratedProject: Project = { ...project };
+const sortClients = (clients: Client[]) =>
+  [...clients].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
+const sortProjects = (projects: Project[]) =>
+  [...projects].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+const sortTodos = (todos: Todo[]) =>
+  [...todos].sort((a, b) =>
+    (a.order ?? 0) - (b.order ?? 0) ||
+    (a.dueDate || '').localeCompare(b.dueDate || '') ||
+    a.task.localeCompare(b.task));
+const sortQuotes = (quotes: Quote[]) =>
+  [...quotes].sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number));
 
-    // Migrazione status legacy
-    if (typeof project.status === 'string' && typeof project.workStatus === 'undefined') {
-      const { status: oldStatus, ...restOfProject } = project;
-      const newStatuses = mapOldStatus(oldStatus);
-      migratedProject = { ...restOfProject, ...newStatuses };
-    }
+const sorters: { [K in DataKey]: (items: any[]) => AppData[K] } = {
+  clients: sortClients,
+  projects: (items) => sortProjects(items.map(normalizeProject)),
+  todos: sortTodos,
+  quotes: sortQuotes,
+  documents: (items: TextDocument[]) => [...items].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')),
+};
 
-    // Aggiunta priorità di default se mancante
-    if (typeof migratedProject.priority === 'undefined') {
-      migratedProject.priority = ProjectPriority.Media;
-    }
+// --- Scrittura di un insieme completo di dati nelle sottocollezioni ---
 
-    return migratedProject;
+const writeCollection = (batch: ChunkedBatch, uid: string, name: DataKey, items: any[]) => {
+  items.filter(isEntity).forEach((item, i) => {
+    let data: any = item;
+    if (name === 'clients') data = { ...item, order: item.order ?? i };
+    if (name === 'projects') data = normalizeProject(item);
+    batch.set(entityRef(uid, name, item.id), withoutId(data));
   });
 };
 
-const migrateLegacyDataFromLocalStorage = async (userId: string): Promise<AppData | null> => {
+const writeAll = (batch: ChunkedBatch, uid: string, data: AppData) =>
+  COLLECTIONS.forEach(name => writeCollection(batch, uid, name, data[name]));
+
+const asArrays = (raw: any): AppData => ({
+  clients: Array.isArray(raw?.clients) ? raw.clients : [],
+  projects: Array.isArray(raw?.projects) ? raw.projects : [],
+  todos: Array.isArray(raw?.todos) ? raw.todos : [],
+  quotes: Array.isArray(raw?.quotes) ? raw.quotes : [],
+  documents: Array.isArray(raw?.documents) ? raw.documents : [],
+});
+
+/**
+ * Migra i dati dal vecchio formato (un unico documento users/{uid} con tre array) alle sottocollezioni.
+ * - Non distruttiva: gli array originali restano nel documento utente come backup.
+ * - Idempotente: gli id sono preservati, quindi se si interrompe può essere ripetuta senza duplicati.
+ * - Il flag schemaVersion viene scritto solo DOPO che tutte le entità sono state salvate.
+ */
+export const ensureMigrated = async (uid: string): Promise<void> => {
+  const snap = await getDoc(userDocRef(uid));
+  const raw = snap.exists() ? snap.data() : null;
+
+  if (raw && (raw.schemaVersion ?? 1) >= SCHEMA_VERSION) return;
+
+  if (raw) {
+    const legacy = asArrays(raw);
+    const batch = new ChunkedBatch();
+    writeAll(batch, uid, legacy);
+    await batch.commit();
+    console.log(`Migrazione completata: ${legacy.clients.length} clienti, ${legacy.projects.length} progetti, ${legacy.todos.length} attività.`);
+  }
+
+  await setDoc(userDocRef(uid), {
+    schemaVersion: SCHEMA_VERSION,
+    ...(raw ? { migratedAt: new Date().toISOString() } : {}),
+  }, { merge: true });
+};
+
+/**
+ * Ascolta in tempo reale le tre collezioni. La callback riceve i dati solo quando
+ * tutte e tre hanno risposto almeno una volta. Le scritture locali vengono notificate
+ * subito (anche offline), quindi questo è l'unico "stato" dell'app.
+ */
+export const subscribeUserData = (
+  uid: string,
+  onData: (data: AppData) => void,
+  onError: (error: Error) => void,
+): (() => void) => {
+  const state: Partial<AppData> = {};
+  const emit = () => {
+    if (COLLECTIONS.every(name => state[name])) onData({ ...state } as AppData);
+  };
+
+  const unsubscribers = COLLECTIONS.map(name =>
+    onSnapshot(colRef(uid, name), snap => {
+      const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+      (state as any)[name] = sorters[name](docs);
+      emit();
+    }, onError)
+  );
+
+  return () => unsubscribers.forEach(u => u());
+};
+
+// --- Scritture puntuali ---
+
+export const saveEntity = <T extends { id: string }>(uid: string, name: CollectionName, entity: T) =>
+  setDoc(entityRef(uid, name, entity.id), withoutId(entity));
+
+export const updateEntity = (uid: string, name: CollectionName, id: string, data: DocumentData) =>
+  updateDoc(entityRef(uid, name, id), data);
+
+export type BatchOp =
+  | { type: 'set'; name: CollectionName; entity: { id: string } }
+  | { type: 'update'; name: CollectionName; id: string; data: DocumentData }
+  | { type: 'delete'; name: CollectionName; id: string };
+
+/** Più scritture atomiche (tutte o nessuna). Max 500 operazioni. */
+export const commitOps = (uid: string, ops: BatchOp[]) => {
+  if (ops.length > 500) throw new Error('Troppe operazioni in un singolo batch.');
+  const batch = writeBatch(db);
+  ops.forEach(op => {
+    if (op.type === 'set') batch.set(entityRef(uid, op.name, op.entity.id), withoutId(op.entity));
+    if (op.type === 'update') batch.update(entityRef(uid, op.name, op.id), op.data);
+    if (op.type === 'delete') batch.delete(entityRef(uid, op.name, op.id));
+  });
+  return batch.commit();
+};
+
+// --- Backup ---
+
+export type BackupData = AppData & { profile?: BusinessProfile | null };
+
+export const exportData = async (uid: string): Promise<BackupData> => {
+  const lists = await Promise.all(COLLECTIONS.map(async name => {
+    const snap = await getDocs(colRef(uid, name));
+    return sorters[name](snap.docs.map(d => ({ ...d.data(), id: d.id })));
+  }));
+  const data = Object.fromEntries(COLLECTIONS.map((name, i) => [name, lists[i]])) as AppData;
+  const profile = await getDoc(profileRef(uid));
+  return { ...data, profile: profile.exists() ? (profile.data() as BusinessProfile) : null };
+};
+
+/**
+ * Sostituisce i dati con quelli del backup.
+ * - Vengono toccate solo le collezioni presenti nel file: un backup vecchio senza preventivi
+ *   non cancella i preventivi esistenti.
+ * - Prima scrive tutte le entità importate, poi elimina quelle che non sono nel backup:
+ *   se l'operazione si interrompe a metà non si perde nulla, al massimo restano elementi in più.
+ */
+export const importData = async (uid: string, raw: any): Promise<void> => {
+  const present = COLLECTIONS.filter(name => Array.isArray(raw?.[name]));
+  const current = await exportData(uid);
+
+  const batch = new ChunkedBatch();
+  present.forEach(name => writeCollection(batch, uid, name, raw[name]));
+  if (raw?.profile && typeof raw.profile === 'object') batch.set(profileRef(uid), raw.profile);
+  await batch.commit();
+
+  const cleanup = new ChunkedBatch();
+  present.forEach(name => {
+    const keep = new Set((raw[name] as any[]).filter(isEntity).map(e => e.id));
+    (current[name] as { id: string }[]).forEach(e => {
+      if (!keep.has(e.id)) cleanup.delete(entityRef(uid, name, e.id));
+    });
+  });
+  await cleanup.commit();
+};
+
+// --- Versioni dei documenti ---
+
+export const listRevisions = async (uid: string, documentId: string): Promise<DocumentRevision[]> => {
+  const snap = await getDocs(query(colRef(uid, 'revisions'), where('documentId', '==', documentId)));
+  return snap.docs
+    .map(d => ({ ...d.data(), id: d.id }) as DocumentRevision)
+    .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+};
+
+// --- Connettore Claude ---
+
+const toBase64Url = (bytes: Uint8Array) =>
+  btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+const sha256Hex = async (text: string) => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+export interface ClaudeLink { id: string; label: string; createdAt: string }
+
+/** Crea un nuovo segreto per il connettore. Su Firestore viene salvato solo l'hash. */
+export const createClaudeLink = async (uid: string, label: string): Promise<string> => {
+  const token = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+  await setDoc(doc(db, 'mcpTokens', await sha256Hex(token)), { uid, label, createdAt: new Date().toISOString() });
+  return token;
+};
+
+export const subscribeClaudeLinks = (uid: string, onLinks: (links: ClaudeLink[]) => void, onError: (e: Error) => void) =>
+  onSnapshot(query(collection(db, 'mcpTokens'), where('uid', '==', uid)), snap =>
+    onLinks(snap.docs.map(d => ({ id: d.id, label: d.data().label, createdAt: d.data().createdAt }))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))), onError);
+
+export const revokeClaudeLink = (id: string) => deleteDoc(doc(db, 'mcpTokens', id));
+
+export const subscribeClaudeActivity = (uid: string, onItems: (items: ClaudeActivity[]) => void, onError: (e: Error) => void) =>
+  onSnapshot(query(colRef(uid, 'activity'), orderBy('at', 'desc'), limit(30)), snap =>
+    onItems(snap.docs.map(d => ({ ...d.data(), id: d.id }) as ClaudeActivity)), onError);
+
+// --- Profilo (dati di chi emette i preventivi) ---
+
+const profileRef = (uid: string) => doc(db, 'users', uid, 'settings', 'profile');
+
+export const subscribeProfile = (uid: string, onProfile: (p: BusinessProfile | null) => void, onError: (e: Error) => void) =>
+  onSnapshot(profileRef(uid), snap => onProfile(snap.exists() ? (snap.data() as BusinessProfile) : null), onError);
+
+export const saveProfile = (uid: string, profile: BusinessProfile) => setDoc(profileRef(uid), profile);
+
+// --- Autenticazione ---
+
+// Migra eventuali dati di una versione molto vecchia salvati in localStorage.
+const migrateLegacyDataFromLocalStorage = async (uid: string): Promise<boolean> => {
     const legacyClients = localStorage.getItem('clients');
     const legacyProjects = localStorage.getItem('projects');
     const legacyTodos = localStorage.getItem('todos');
-    const legacyUser = localStorage.getItem('userCredentials'); // Per pulizia completa
 
-    if (legacyClients && legacyProjects && legacyTodos) {
-        console.log("Dati legacy trovati. Eseguo la migrazione su Firestore...");
-        try {
-            const clients = JSON.parse(legacyClients);
-            const todos = JSON.parse(legacyTodos);
-            const projects = projectMigrator(JSON.parse(legacyProjects));
-            
-            const dataToMigrate = { clients, projects, todos };
+    if (!(legacyClients && legacyProjects && legacyTodos)) return false;
 
-            // 1. Salva i dati su Firestore PRIMA di cancellarli localmente
-            await setDoc(doc(db, "users", userId), dataToMigrate);
+    try {
+        const data = asArrays({
+          clients: JSON.parse(legacyClients),
+          projects: JSON.parse(legacyProjects),
+          todos: JSON.parse(legacyTodos),
+        });
+        const batch = new ChunkedBatch();
+        writeAll(batch, uid, data);
+        await batch.commit();
 
-            // 2. Solo se il salvataggio ha successo, procedi con la pulizia
-            localStorage.removeItem('clients');
-            localStorage.removeItem('projects');
-            localStorage.removeItem('todos');
-            if (legacyUser) localStorage.removeItem('userCredentials');
-            
-            console.log("Migrazione completata con successo. I vecchi dati locali sono stati rimossi.");
-            return dataToMigrate;
-
-        } catch (error) {
-            console.error("Errore critico durante la migrazione dei dati. I dati locali non sono stati rimossi.", error);
-            // Non ritornare nulla in caso di errore per forzare il caricamento di dati vuoti/esistenti.
-            return null;
-        }
+        // Solo dopo il salvataggio riuscito si puliscono i dati locali
+        ['clients', 'projects', 'todos', 'userCredentials'].forEach(k => localStorage.removeItem(k));
+        return true;
+    } catch (error) {
+        console.error("Errore durante la migrazione dei dati locali. I dati locali non sono stati rimossi.", error);
+        return false;
     }
-    return null;
-}
-
-// --- Funzioni di Autenticazione Reali ---
+};
 
 export const register = async (email: string, password: string): Promise<User> => {
-  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-  const user = userCredential.user;
-
-  // Controlla se ci sono dati legacy da migrare e li salva in modo sicuro
-  const migratedData = await migrateLegacyDataFromLocalStorage(user.uid);
-  
-  // Se non ci sono dati migrati, crea il documento utente vuoto
-  if (!migratedData) {
-      await setDoc(doc(db, "users", user.uid), initialData);
-  }
-  
+  const { user } = await createUserWithEmailAndPassword(auth, email, password);
+  await migrateLegacyDataFromLocalStorage(user.uid);
+  await setDoc(userDocRef(user.uid), { schemaVersion: SCHEMA_VERSION }, { merge: true });
   return user;
-}
+};
 
 export const login = async (email: string, password: string): Promise<User> => {
-  const userCredential = await signInWithEmailAndPassword(auth, email, password);
-  return userCredential.user;
-}
-
-export const logout = (): Promise<void> => {
-  return signOut(auth);
-}
-
-// --- Funzioni Dati Reali ---
-
-export const getData = async (userId: string): Promise<AppData> => {
-  const userDocRef = doc(db, "users", userId);
-  const userDocSnap = await getDoc(userDocRef);
-
-  if (userDocSnap.exists()) {
-    const data = userDocSnap.data() as AppData;
-    // Esegue una migrazione interna non distruttiva
-    const migratedProjects = projectMigrator(data.projects || []);
-    
-    // Controlla se la migrazione ha effettivamente cambiato qualcosa
-    const needsUpdate = JSON.stringify(migratedProjects) !== JSON.stringify(data.projects || []);
-    
-    if (needsUpdate) {
-        console.log("Formato dati obsoleto rilevato. L'aggiornamento avverrà al prossimo salvataggio automatico.");
-    }
-
-    return { ...data, projects: migratedProjects };
-
-  } else {
-    // REGOLA DI SICUREZZA CRITICA: Non creare mai un documento qui.
-    // La creazione avviene solo durante la registrazione. Questo previene la sovrascrittura
-    // di dati in caso di errori di rete temporanei o race conditions.
-    console.warn(`Documento utente non trovato per l'UID: ${userId}. Verrà restituito uno stato vuoto. I dati NON verranno sovrascritti sul cloud.`);
-    return initialData;
-  }
+  const { user } = await signInWithEmailAndPassword(auth, email, password);
+  return user;
 };
 
-export const saveData = (userId: string, data: AppData): Promise<void> => {
-  const userDocRef = doc(db, "users", userId);
-  // `setDoc` sovrascrive, che è il comportamento desiderato per salvare l'intero stato dell'app.
-  return setDoc(userDocRef, data);
-};
+export const logout = (): Promise<void> => signOut(auth);
 
-// Funzione per ascoltare i cambiamenti dello stato di autenticazione
-export const onAuthChange = (callback: (user: User | null) => void) => {
-  return onAuthStateChanged(auth, callback);
-};
+export const onAuthChange = (callback: (user: User | null) => void) => onAuthStateChanged(auth, callback);

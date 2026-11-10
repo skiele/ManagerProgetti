@@ -1,8 +1,12 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment } from './types';
-import { CalendarIcon, ChartBarIcon, PlusIcon, TrashIcon, UsersIcon, LogOutIcon, SparklesIcon, CopyIcon, SunIcon, MoonIcon, CogIcon, DownloadIcon, UploadIcon, MenuIcon, XIcon, EditIcon, ListTodoIcon } from './components/icons';
+import { deleteField } from 'firebase/firestore';
+import { User } from 'firebase/auth';
+import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority, Payment, AppData, Quote, QuoteStatus, BusinessProfile, TextDocument, DocumentKind } from './types';
+import { CalendarIcon, ChartBarIcon, PlusIcon, UsersIcon, LogOutIcon, SunIcon, MoonIcon, CogIcon, MenuIcon, XIcon, ListTodoIcon, BriefcaseIcon, FileTextIcon } from './components/icons';
 import Modal from './components/Modal';
+import Wordmark from './components/Wordmark';
+import PageHeader from './components/PageHeader';
 import CalendarView from './components/CalendarView';
 import TaskView from './components/TaskView';
 import LoginScreen from './components/LoginScreen';
@@ -10,44 +14,76 @@ import SetupScreen from './components/SetupScreen';
 import Dashboard from './components/Dashboard';
 import ClientView from './components/ClientView';
 import SettingsView from './components/SettingsView';
+import ProjectsView from './components/ProjectsView';
+import ProjectDetail from './components/ProjectDetail';
+import QuotesTab from './components/QuotesTab';
+import DocumentEditor from './components/DocumentEditor';
+import DocumentsList from './components/DocumentsList';
+import { quoteTotals } from './utils/quotes';
+import { formatCurrency } from './utils/formatting';
+import EntityForm, { FormType } from './components/EntityForm';
+import AiProjectForm, { AiProjectResult } from './components/AiProjectForm';
 import * as firebaseService from './services/firebaseService';
-import { GoogleGenAI, Type } from '@google/genai';
-import { User } from 'firebase/auth';
+import { BatchOp } from './services/firebaseService';
 
 
-type AppState = 'loading' | 'authenticated' | 'unauthenticated';
-type AppData = {
-  clients: Client[];
-  projects: Project[];
-  todos: Todo[];
-};
+type AppState = 'loading' | 'authenticated' | 'unauthenticated' | 'error';
 type Theme = 'light' | 'dark';
 
+const FullScreenMessage: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="flex flex-col items-center justify-center h-screen gap-4 p-6 text-center bg-background text-foreground dark:bg-dark-background dark:text-dark-foreground">{children}</div>
+);
+
+// Calcola lo stato di pagamento a partire dai pagamenti registrati
+const computePaymentStatus = (project: Project, payments: Payment[], projectTotal: number): PaymentStatus => {
+  const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  if (totalPaid > 0 && totalPaid < projectTotal) return PaymentStatus.ParzialmentePagato;
+  if (totalPaid > 0 && totalPaid >= projectTotal) return PaymentStatus.Pagato;
+  if (project.paymentStatus === PaymentStatus.Pagato || project.paymentStatus === PaymentStatus.ParzialmentePagato) {
+    return PaymentStatus.Fatturato;
+  }
+  return project.paymentStatus;
+};
+
 // --- Main Application Component (Protected) ---
-const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: string }> = ({ onLogout, initialData, userId }) => {
-  const [clients, setClients] = useState<Client[]>(initialData.clients);
-  const [projects, setProjects] = useState<Project[]>(initialData.projects);
-  const [todos, setTodos] = useState<Todo[]>(initialData.todos);
+const MainApp: React.FC<{ onLogout: () => void; userId: string }> = ({ onLogout, userId }) => {
+  // L'unica fonte di verità è Firestore: lo stato si aggiorna dagli snapshot in tempo reale
+  // (che includono subito anche le scritture locali, pure offline).
+  const [data, setData] = useState<AppData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return firebaseService.subscribeUserData(userId, setData, (error) => {
+      console.error("Errore nella lettura dei dati:", error);
+      setLoadError(error.message);
+    });
+  }, [userId]);
+
+  const [profile, setProfile] = useState<BusinessProfile | null>(null);
+  useEffect(() => firebaseService.subscribeProfile(userId, setProfile, (error) => console.error("Errore profilo:", error)), [userId]);
+
+  const clients = data?.clients ?? [];
+  const projects = data?.projects ?? [];
+  const todos = data?.todos ?? [];
+  const quotes = data?.quotes ?? [];
+  const documents = data?.documents ?? [];
+
   const draggedClientIdRef = useRef<string | null>(null);
   const navRef = useRef<HTMLElement>(null);
   const [isNavScrollable, setIsNavScrollable] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-
-  // Helper function to save the current state to Firestore
-  const saveDataToCloud = (updatedData: Partial<AppData>) => {
-    const fullData = {
-      clients,
-      projects,
-      todos,
-      ...updatedData,
-    };
-    firebaseService.saveData(userId, fullData);
-  };
+  // Ogni scrittura passa da qui: gli errori vengono mostrati invece di essere ignorati.
+  const persist = (operation: Promise<unknown>) => operation.catch((error: Error) => {
+    console.error("Errore di salvataggio:", error);
+    setSaveError(`Salvataggio non riuscito: ${error.message}`);
+  });
 
   const [selectedView, setSelectedView] = useState<string>('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalContent, setModalContent] = useState<'client' | 'project' | 'todo' | 'payment' | 'editProject' | null>(null);
+  const [modalContent, setModalContent] = useState<FormType | null>(null);
+  const [modalKey, setModalKey] = useState(0);
   const [currentContextId, setCurrentContextId] = useState<string | null>(null);
 
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -57,7 +93,7 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   const [filterYear, setFilterYear] = useState('all');
   const [filterMonth, setFilterMonth] = useState('all');
   
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'dark');
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'light');
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -80,54 +116,59 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     resizeObserver.observe(navElement);
     checkScrollable();
     return () => resizeObserver.disconnect();
-  }, [clients]);
+  }, [clients, data === null]);
 
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
   }
+
+  const projectTotalOf = (project: Project) =>
+    project.value + todos.filter(t => t.projectId === project.id).reduce((sum, todo) => sum + todo.income, 0);
+
+  // Quando cambia il valore di un progetto con pagamenti già registrati, lo stato di pagamento va ricalcolato
+  const paymentStatusForValue = (project: Project, newValue: number): PaymentStatus => {
+    const payments = project.payments || [];
+    if (payments.length === 0) return project.paymentStatus;
+    return computePaymentStatus(project, payments, projectTotalOf(project) - project.value + newValue);
+  };
+
+  const nextTodoOrder = () => Math.max(0, ...todos.map(t => t.order ?? 0)) + 1;
 
   const handleAddClient = (name: string, email?: string) => {
     const newClient: Client = {
       id: crypto.randomUUID(),
       name,
       ...(email && { email }),
+      order: Math.max(0, ...clients.map(c => c.order ?? 0)) + 1,
     };
-    setClients(prev => {
-      const newClients = [...prev, newClient];
-      saveDataToCloud({ clients: newClients });
-      return newClients;
-    });
+    persist(firebaseService.saveEntity(userId, 'clients', newClient));
   };
-  
-  const handleAddProject = (clientId: string, name: string, value: number, notes?: string): Project => {
-    const newProject: Project = {
-      id: crypto.randomUUID(),
-      clientId,
-      name,
-      value,
-      workStatus: WorkStatus.PreventivoDaInviare,
-      paymentStatus: PaymentStatus.DaFatturare,
-      priority: ProjectPriority.Media,
-      createdAt: new Date().toISOString(),
-      ...(notes && { notes }),
-      payments: [],
-    };
-    setProjects(prev => {
-      const newProjects = [...prev, newProject];
-      saveDataToCloud({ projects: newProjects });
-      return newProjects;
-    });
-    return newProject;
+
+  const buildProject = (clientId: string, name: string, value: number, notes?: string): Project => ({
+    id: crypto.randomUUID(),
+    clientId,
+    name,
+    value,
+    workStatus: WorkStatus.PreventivoDaInviare,
+    paymentStatus: PaymentStatus.DaFatturare,
+    priority: ProjectPriority.Media,
+    createdAt: new Date().toISOString(),
+    ...(notes && { notes }),
+    payments: [],
+  });
+
+  const handleAddProject = (clientId: string, name: string, value: number) => {
+    persist(firebaseService.saveEntity(userId, 'projects', buildProject(clientId, name, value)));
   };
 
   const handleUpdateProject = (projectId: string, data: { name: string; value: number }) => {
-    setProjects(prev => {
-      const newProjects = prev.map(p =>
-        p.id === projectId ? { ...p, name: data.name, value: data.value } : p
-      );
-      saveDataToCloud({ projects: newProjects });
-      return newProjects;
-    });
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    persist(firebaseService.updateEntity(userId, 'projects', projectId, {
+      name: data.name,
+      value: data.value,
+      paymentStatus: paymentStatusForValue(project, data.value),
+    }));
   };
 
   const handleAddTodo = (projectId: string, task: string, income: number, dueDate?: string) => {
@@ -138,140 +179,66 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
       income,
       completed: false,
       ...(dueDate && { dueDate }),
-      order: todos.length // Assign default order at the end
+      order: nextTodoOrder(),
     };
-    setTodos(prev => {
-      const newTodos = [...prev, newTodo];
-      saveDataToCloud({ todos: newTodos });
-      return newTodos;
-    });
+    persist(firebaseService.saveEntity(userId, 'todos', newTodo));
+  };
+
+  // Progetto + attività generati dall'AI: un'unica scrittura atomica
+  const handleAiGenerated = (clientId: string) => async (result: AiProjectResult) => {
+    const project = buildProject(clientId, result.projectName, result.projectValue, result.projectNotes);
+    const baseOrder = nextTodoOrder();
+    const ops: BatchOp[] = [
+      { type: 'set', name: 'projects', entity: project },
+      ...(result.todos || []).map((todo, i): BatchOp => ({
+        type: 'set', name: 'todos',
+        entity: { id: crypto.randomUUID(), projectId: project.id, task: todo.task, income: todo.income, completed: false, order: baseOrder + i } as Todo,
+      })),
+    ];
+    await firebaseService.commitOps(userId, ops);
   };
 
   const handleReorderTodos = (updatedTodos: Todo[]) => {
-      setTodos(prev => {
-          // Create a map of updated todos for O(1) lookup
-          const updatedMap = new Map(updatedTodos.map(t => [t.id, t]));
-          
-          // Merge updated todos with existing ones
-          const newTodos = prev.map(t => updatedMap.get(t.id) || t);
-          
-          saveDataToCloud({ todos: newTodos });
-          return newTodos;
-      });
-  }
+    persist(firebaseService.commitOps(userId, updatedTodos.map((t): BatchOp => ({
+      type: 'update', name: 'todos', id: t.id, data: { order: t.order },
+    }))));
+  };
   
   const handleAddPayment = (projectId: string, amount: number, date: string) => {
     const project = projects.find(p => p.id === projectId);
     if (!project) return;
 
-    setProjects(prev => {
-      const newProjects = prev.map(p => {
-        if (p.id === projectId) {
-          const newPayment: Payment = { id: crypto.randomUUID(), amount, date };
-          const updatedPayments = [...(p.payments || []), newPayment];
-          const totalPaid = updatedPayments.reduce((sum, payment) => sum + payment.amount, 0);
-
-          const projectTodos = todos.filter(t => t.projectId === projectId);
-          const projectTotal = p.value + projectTodos.reduce((sum, todo) => sum + todo.income, 0);
-
-          let newPaymentStatus = p.paymentStatus;
-          if (totalPaid > 0 && totalPaid < projectTotal) {
-            newPaymentStatus = PaymentStatus.ParzialmentePagato;
-          } else if (totalPaid >= projectTotal) {
-            newPaymentStatus = PaymentStatus.Pagato;
-          } else if (totalPaid <= 0 && (p.paymentStatus === PaymentStatus.Pagato || p.paymentStatus === PaymentStatus.ParzialmentePagato)) {
-             newPaymentStatus = PaymentStatus.Fatturato;
-          }
-          
-          return { ...p, payments: updatedPayments, paymentStatus: newPaymentStatus };
-        }
-        return p;
-      });
-      saveDataToCloud({ projects: newProjects });
-      return newProjects;
-    });
+    const newPayment: Payment = { id: crypto.randomUUID(), amount, date };
+    const payments = [...(project.payments || []), newPayment];
+    persist(firebaseService.updateEntity(userId, 'projects', projectId, {
+      payments,
+      paymentStatus: computePaymentStatus(project, payments, projectTotalOf(project)),
+    }));
   };
   
   const handleDeletePayment = (projectId: string, paymentId: string) => {
     if (!window.confirm("Sei sicuro di voler eliminare questo pagamento?")) return;
-    
-    setProjects(prev => {
-        const newProjects = prev.map(p => {
-            if (p.id === projectId) {
-                const updatedPayments = (p.payments || []).filter(payment => payment.id !== paymentId);
-                const totalPaid = updatedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
 
-                const projectTodos = todos.filter(t => t.projectId === projectId);
-                const projectTotal = p.value + projectTodos.reduce((sum, todo) => sum + todo.income, 0);
-
-                let newPaymentStatus = p.paymentStatus;
-                if (totalPaid <= 0) {
-                   if (p.paymentStatus !== PaymentStatus.DaFatturare) {
-                     newPaymentStatus = PaymentStatus.Fatturato;
-                   }
-                } else if (totalPaid > 0 && totalPaid < projectTotal) {
-                    newPaymentStatus = PaymentStatus.ParzialmentePagato;
-                } else if (totalPaid >= projectTotal) {
-                    newPaymentStatus = PaymentStatus.Pagato;
-                }
-
-                return { ...p, payments: updatedPayments, paymentStatus: newPaymentStatus };
-            }
-            return p;
-        });
-        saveDataToCloud({ projects: newProjects });
-        return newProjects;
-    });
-  };
-
-  const handleDuplicateProject = (projectId: string) => {
-    const originalProject = projects.find(p => p.id === projectId);
-    if (!originalProject) return;
-
-    const newProject: Project = {
-        ...originalProject,
-        id: crypto.randomUUID(),
-        name: `${originalProject.name} (Copia)`,
-        workStatus: WorkStatus.PreventivoDaInviare,
-        paymentStatus: PaymentStatus.DaFatturare,
-        createdAt: new Date().toISOString(),
-        paidAt: undefined,
-        payments: [],
-    };
-
-    const originalTodos = todos.filter(t => t.projectId === projectId);
-    const newTodos: Todo[] = originalTodos.map(todo => ({
-        ...todo,
-        id: crypto.randomUUID(),
-        projectId: newProject.id,
-        completed: false,
-        order: todo.order 
+    const payments = (project.payments || []).filter(payment => payment.id !== paymentId);
+    persist(firebaseService.updateEntity(userId, 'projects', projectId, {
+      payments,
+      paymentStatus: computePaymentStatus(project, payments, projectTotalOf(project)),
     }));
-
-    setProjects(prev => {
-      const newProjects = [...prev, newProject];
-      setTodos(prevTodos => {
-        const updatedTodos = [...prevTodos, ...newTodos];
-        saveDataToCloud({ projects: newProjects, todos: updatedTodos });
-        return updatedTodos;
-      });
-      return newProjects;
-    });
   };
 
   const handleDeleteClient = (clientId: string) => {
-    if (window.confirm('Sei sicuro di voler eliminare questo cliente? Verranno eliminati anche tutti i suoi progetti e le relative attività.')) {
-        const projectsToDelete = projects.filter(p => p.clientId === clientId);
-        const projectIdsToDelete = projectsToDelete.map(p => p.id);
-        
-        const newTodos = todos.filter(t => !projectIdsToDelete.includes(t.projectId));
-        const newProjects = projects.filter(p => p.clientId !== clientId);
-        const newClients = clients.filter(c => c.id !== clientId);
-
-        setTodos(newTodos);
-        setProjects(newProjects);
-        setClients(newClients);
-        saveDataToCloud({ clients: newClients, projects: newProjects, todos: newTodos });
+    if (window.confirm('Sei sicuro di voler eliminare questo cliente? Verranno eliminati anche tutti i suoi progetti con attività e preventivi. I documenti restano, senza progetto.')) {
+        const projectIdsToDelete = new Set(projects.filter(p => p.clientId === clientId).map(p => p.id));
+        const ops: BatchOp[] = [
+          ...todos.filter(t => projectIdsToDelete.has(t.projectId)).map((t): BatchOp => ({ type: 'delete', name: 'todos', id: t.id })),
+          ...quotes.filter(q => projectIdsToDelete.has(q.projectId)).map((q): BatchOp => ({ type: 'delete', name: 'quotes', id: q.id })),
+          ...documents.filter(d => d.projectId && projectIdsToDelete.has(d.projectId)).map((d): BatchOp => ({ type: 'update', name: 'documents', id: d.id, data: { projectId: null } })),
+          ...[...projectIdsToDelete].map((id): BatchOp => ({ type: 'delete', name: 'projects', id })),
+          { type: 'delete', name: 'clients', id: clientId },
+        ];
+        persist(firebaseService.commitOps(userId, ops));
 
         if (selectedView === clientId) {
             setSelectedView('dashboard');
@@ -280,33 +247,96 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   };
 
   const handleDeleteProject = (projectId: string) => {
-      if (window.confirm('Sei sicuro di voler eliminare questo progetto? Verranno eliminate anche tutte le sue attività.')) {
-          const newTodos = todos.filter(t => t.projectId !== projectId);
-          const newProjects = projects.filter(p => p.id !== projectId);
-          setTodos(newTodos);
-          setProjects(newProjects);
-          saveDataToCloud({ projects: newProjects, todos: newTodos });
+      if (window.confirm('Sei sicuro di voler eliminare questo progetto? Verranno eliminate anche tutte le sue attività e i suoi preventivi. I documenti restano, senza progetto.')) {
+          const ops: BatchOp[] = [
+            ...todos.filter(t => t.projectId === projectId).map((t): BatchOp => ({ type: 'delete', name: 'todos', id: t.id })),
+            ...quotes.filter(q => q.projectId === projectId).map((q): BatchOp => ({ type: 'delete', name: 'quotes', id: q.id })),
+            ...documents.filter(d => d.projectId === projectId).map((d): BatchOp => ({ type: 'update', name: 'documents', id: d.id, data: { projectId: null } })),
+            { type: 'delete', name: 'projects', id: projectId },
+          ];
+          persist(firebaseService.commitOps(userId, ops));
+          if (selectedView === `project:${projectId}`) {
+            const project = projects.find(p => p.id === projectId);
+            setSelectedView(project ? project.clientId : 'projects');
+          }
       }
+  };
+
+  // --- Documenti ---
+
+  const handleCreateDocument = (projectId: string | null) => {
+    const now = new Date().toISOString();
+    const document: TextDocument = {
+      id: crypto.randomUUID(), projectId, title: 'Nuovo documento', kind: DocumentKind.Soggetto,
+      content: '', createdAt: now, updatedAt: now, updatedBy: 'app', revision: 1,
+    };
+    persist(firebaseService.saveEntity(userId, 'documents', document));
+    handleSelectView(`doc:${document.id}`);
+  };
+
+  const handleDeleteDocument = (document: TextDocument) => {
+    if (!window.confirm(`Eliminare definitivamente "${document.title}" e tutte le sue versioni precedenti?`)) return;
+    handleSelectView(document.projectId ? `project:${document.projectId}` : 'documents');
+    persist(firebaseService.listRevisions(userId, document.id).then(revs => firebaseService.commitOps(userId, [
+      ...revs.slice(0, 450).map((r): BatchOp => ({ type: 'delete', name: 'revisions', id: r.id })),
+      { type: 'delete', name: 'documents', id: document.id },
+    ])));
+  };
+
+  // --- Preventivi ---
+
+  const handleSaveQuote = (quote: Quote) => persist(firebaseService.saveEntity(userId, 'quotes', quote));
+
+  const handleDeleteQuote = (quote: Quote) => {
+    if (window.confirm(`Eliminare il preventivo ${quote.number}?`)) {
+      persist(firebaseService.commitOps(userId, [{ type: 'delete', name: 'quotes', id: quote.id }]));
+    }
+  };
+
+  // Il cambio di stato del preventivo aggiorna anche il progetto quando ha senso
+  const handleChangeQuoteStatus = (quote: Quote, status: QuoteStatus) => {
+    const project = projects.find(p => p.id === quote.projectId);
+    const ops: BatchOp[] = [{ type: 'update', name: 'quotes', id: quote.id, data: { status } }];
+    const projectUpdate: Partial<Project> = {};
+
+    if (project && status === QuoteStatus.Inviato && project.workStatus === WorkStatus.PreventivoDaInviare) {
+      projectUpdate.workStatus = WorkStatus.PreventivoInviato;
+    }
+    if (project && status === QuoteStatus.Accettato) {
+      const { subtotal } = quoteTotals(quote);
+      const inQuotePhase = project.workStatus === WorkStatus.PreventivoDaInviare || project.workStatus === WorkStatus.PreventivoInviato;
+      const changes = [
+        project.value !== subtotal ? `valore del progetto da ${formatCurrency(project.value)} a ${formatCurrency(subtotal)}` : null,
+        inQuotePhase ? 'stato di lavorazione a "In lavorazione"' : null,
+      ].filter(Boolean);
+      if (changes.length && window.confirm(`Preventivo accettato. Aggiornare anche ${changes.join(' e ')}?`)) {
+        projectUpdate.value = subtotal;
+        projectUpdate.paymentStatus = paymentStatusForValue(project, subtotal);
+        if (inQuotePhase) projectUpdate.workStatus = WorkStatus.InLavorazione;
+      }
+    }
+    if (project && Object.keys(projectUpdate).length) {
+      ops.push({ type: 'update', name: 'projects', id: project.id, data: projectUpdate });
+    }
+    persist(firebaseService.commitOps(userId, ops));
   };
 
   const handleDeleteTodo = (todoId: string) => {
     if (window.confirm('Sei sicuro di voler eliminare questa attività?')) {
-      setTodos(prev => {
-        const newTodos = prev.filter(t => t.id !== todoId);
-        saveDataToCloud({ todos: newTodos });
-        return newTodos;
-      });
+      persist(firebaseService.commitOps(userId, [{ type: 'delete', name: 'todos', id: todoId }]));
     }
   };
 
-  const openModal = (type: 'client' | 'project' | 'todo' | 'payment' | 'editProject', contextId: string | null = null) => {
+  const openModal = (type: FormType, contextId: string | null = null) => {
     setModalContent(type);
     setCurrentContextId(contextId);
+    setModalKey(k => k + 1); // form nuovo a ogni apertura
     setIsModalOpen(true);
   };
   
   const openAiModal = (clientId: string) => {
     setAiContextClientId(clientId);
+    setModalKey(k => k + 1);
     setIsAiModalOpen(true);
   };
 
@@ -353,149 +383,16 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     const [draggedClient] = reorderedClients.splice(dragIndex, 1);
     reorderedClients.splice(dropIndex, 0, draggedClient);
 
-    setClients(reorderedClients);
-    saveDataToCloud({ clients: reorderedClients });
+    const ops = reorderedClients
+      .map((c, index): BatchOp | null => c.order === index ? null : { type: 'update', name: 'clients', id: c.id, data: { order: index } })
+      .filter((op): op is BatchOp => op !== null);
+    persist(firebaseService.commitOps(userId, ops));
   };
   
   const handleDragEnd = (e: React.DragEvent<HTMLLIElement>) => {
     draggedClientIdRef.current = null;
     e.currentTarget.classList.remove('opacity-50', 'bg-primary');
   }
-  
-  const FormComponent = () => {
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
-    const [projectValue, setProjectValue] = useState(0);
-    const [task, setTask] = useState('');
-    const [income, setIncome] = useState(0);
-    const [dueDate, setDueDate] = useState('');
-    const [paymentAmount, setPaymentAmount] = useState(0);
-    const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
-
-    useEffect(() => {
-        setName(''); setEmail(''); setProjectValue(0); setTask('');
-        setIncome(0); setDueDate(''); setPaymentAmount(0);
-        setPaymentDate(new Date().toISOString().split('T')[0]);
-
-        if (modalContent === 'editProject' && currentContextId) {
-            const projectToEdit = projects.find(p => p.id === currentContextId);
-            if (projectToEdit) {
-                setName(projectToEdit.name);
-                setProjectValue(projectToEdit.value);
-            }
-        }
-    }, [modalContent, currentContextId, projects]);
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (modalContent === 'client' && name) {
-            handleAddClient(name, email || undefined);
-        } else if (modalContent === 'project' && name && currentContextId) {
-            handleAddProject(currentContextId, name, projectValue);
-        } else if (modalContent === 'editProject' && name && currentContextId) {
-            handleUpdateProject(currentContextId, { name, value: projectValue });
-        } else if (modalContent === 'todo' && task && currentContextId) {
-            handleAddTodo(currentContextId, task, income, dueDate || undefined);
-        } else if (modalContent === 'payment' && paymentAmount > 0 && currentContextId) {
-            handleAddPayment(currentContextId, paymentAmount, paymentDate);
-        }
-        setIsModalOpen(false);
-    };
-
-    const renderFormFields = () => {
-        switch (modalContent) {
-            case 'client':
-                return <>
-                    <input type="text" placeholder="Nome Cliente" value={name} onChange={e => setName(e.target.value)} required/>
-                    <input type="email" placeholder="Email Cliente (Opzionale)" value={email} onChange={e => setEmail(e.target.value)} />
-                </>;
-            case 'project':
-            case 'editProject':
-                return <>
-                    {modalContent === 'project' && (
-                        <select value={currentContextId || ''} onChange={(e) => setCurrentContextId(e.target.value)} required>
-                            <option value="" disabled>Seleziona Cliente</option>
-                            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                    )}
-                    <input type="text" placeholder="Nome Progetto" value={name} onChange={e => setName(e.target.value)} required/>
-                    <input type="number" placeholder="Valore Progetto (€)" value={projectValue} onChange={e => setProjectValue(Number(e.target.value))} required/>
-                </>;
-            case 'todo':
-                 return <>
-                    <input type="text" placeholder="Attività" value={task} onChange={e => setTask(e.target.value)} required/>
-                    <input type="number" placeholder="Incasso (€) - Opzionale" value={income} onChange={e => setIncome(Number(e.target.value))} />
-                    <input type="date" placeholder="Data di scadenza" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                </>;
-            case 'payment':
-                return <>
-                    <input type="number" placeholder="Importo Pagamento (€)" value={paymentAmount} onChange={e => setPaymentAmount(Number(e.target.value))} required/>
-                    <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required/>
-                </>;
-            default: return null;
-        }
-    };
-    
-    const buttonText = modalContent === 'editProject' ? 'Salva Modifiche' : 'Aggiungi';
-
-    return <form onSubmit={handleSubmit} className="space-y-4">
-        {renderFormFields()}
-        <div className="flex justify-end pt-4">
-          <button type="submit" className="btn btn-primary px-4 py-2">{buttonText}</button>
-        </div>
-    </form>
-  };
-
-  const AiFormComponent = ({ clientId, onComplete }: { clientId: string; onComplete: () => void }) => {
-      const [description, setDescription] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!description) return;
-        setLoading(true);
-        setError('');
-
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-            const schema = {
-                type: Type.OBJECT,
-                properties: {
-                    projectName: { type: Type.STRING }, projectValue: { type: Type.NUMBER }, projectNotes: { type: Type.STRING },
-                    todos: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { task: { type: Type.STRING }, income: { type: Type.NUMBER } }, required: ["task", "income"] } }
-                },
-                required: ["projectName", "projectValue", "projectNotes", "todos"]
-            };
-
-            const prompt = `Dato il brief di progetto: "${description}", genera un nome, valore, nota e 3-5 to-do comuni. Rispondi solo in JSON.`;
-            
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash', contents: prompt,
-                config: { responseMimeType: "application/json", responseSchema: schema }
-            });
-
-            const result = JSON.parse(response.text);
-            const newProject = handleAddProject(clientId, result.projectName, result.projectValue, result.projectNotes);
-            result.todos?.forEach((todo: { task: string; income: number }) => handleAddTodo(newProject.id, todo.task, todo.income));
-            onComplete();
-        } catch (err) {
-            setError('Generazione fallita. Riprova.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <textarea placeholder="Descrivi brevemente il progetto (es. 'Sito e-commerce per un negozio di abbigliamento')" value={description} onChange={e => setDescription(e.target.value)} rows={4} required disabled={loading}/>
-        {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-        <button type="submit" className="w-full bg-accent text-white py-2 rounded-lg font-semibold hover:bg-opacity-80 transition-opacity flex items-center justify-center disabled:bg-gray-400" disabled={loading}>
-            {loading ? 'Generazione...' : <><SparklesIcon className="w-5 h-5 mr-2"/> Genera Progetto</>}
-        </button>
-      </form>
-    );
-  };
 
   // --- OTTIMIZZAZIONE PERFORMANCE: CALCOLI CENTRALIZZATI ---
   
@@ -646,60 +543,54 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
   }, [clients, clientPriorities]);
 
 
-  const handleUpdateProjectWorkStatus = (id: string, workStatus: WorkStatus) => setProjects(prev => {
-    const newProjects = prev.map(p => p.id === id ? { ...p, workStatus } : p);
-    saveDataToCloud({ projects: newProjects });
-    return newProjects;
-  });
+  const handleUpdateProjectWorkStatus = (id: string, workStatus: WorkStatus) =>
+    persist(firebaseService.updateEntity(userId, 'projects', id, { workStatus }));
 
-  const handleToggleTodo = (id: string, completed: boolean) => setTodos(prev => {
-    const newTodos = prev.map(t => t.id === id ? { ...t, completed } : t);
-    saveDataToCloud({ todos: newTodos });
-    return newTodos;
-  });
+  const handleToggleTodo = (id: string, completed: boolean) =>
+    persist(firebaseService.updateEntity(userId, 'todos', id, { completed }));
 
-  const handleUpdateProjectNotes = (id: string, notes: string) => setProjects(prev => {
-    const newProjects = prev.map(p => p.id === id ? { ...p, notes } : p);
-    saveDataToCloud({ projects: newProjects });
-    return newProjects;
-  });
-  
-  const handleUpdateProjectPriority = (id: string, priority: ProjectPriority) => setProjects(prev => {
-    const newProjects = prev.map(p => p.id === id ? { ...p, priority } : p);
-    saveDataToCloud({ projects: newProjects });
-    return newProjects;
-  });
+  const handleUpdateProjectNotes = (id: string, notes: string) =>
+    persist(firebaseService.updateEntity(userId, 'projects', id, { notes }));
+
+  const handleUpdateProjectPriority = (id: string, priority: ProjectPriority) =>
+    persist(firebaseService.updateEntity(userId, 'projects', id, { priority }));
 
   const handleUpdateProjectPaymentStatus = (id: string, paymentStatus: PaymentStatus) => {
-    setProjects(prev => {
-      const newProjects = prev.map(p => {
-        if (p.id === id) {
-          const { paidAt, ...rest } = p;
-          const updatedProject: Project = { ...rest, paymentStatus, };
-          if (paymentStatus === PaymentStatus.Pagato) {
-            updatedProject.paidAt = p.paidAt || new Date().toISOString();
-          }
-          return updatedProject;
-        }
-        return p;
-      });
-      saveDataToCloud({ projects: newProjects });
-      return newProjects;
-    });
+    const project = projects.find(p => p.id === id);
+    if (!project) return;
+    persist(firebaseService.updateEntity(userId, 'projects', id, {
+      paymentStatus,
+      paidAt: paymentStatus === PaymentStatus.Pagato ? (project.paidAt || new Date().toISOString()) : deleteField(),
+    }));
   };
 
   const selectedClient = useMemo(() => clients.find(c => c.id === selectedView), [clients, selectedView]);
+  const selectedProject = useMemo(
+    () => selectedView.startsWith('project:') ? projects.find(p => p.id === selectedView.slice('project:'.length)) : undefined,
+    [projects, selectedView]);
+  const openProject = (projectId: string) => handleSelectView(`project:${projectId}`);
+  const selectedDocument = useMemo(
+    () => selectedView.startsWith('doc:') ? documents.find(d => d.id === selectedView.slice('doc:'.length)) : undefined,
+    [documents, selectedView]);
+  const openDocument = (id: string) => handleSelectView(`doc:${id}`);
   
-  const getPriorityClass = (clientId: string): string => {
-    const priority = clientPriorities.get(clientId);
-    if (!priority) return 'border-transparent';
-    switch (priority) {
-      case ProjectPriority.Alta: return 'border-orange-500';
-      case ProjectPriority.Media: return 'border-green-500';
-      case ProjectPriority.Bassa: return 'border-gray-500';
-      default: return 'border-transparent';
+  // Pallino accanto al cliente: arancio = priorità alta, bianco = media, grigio = bassa o nessun progetto attivo
+  const priorityDotClass = (clientId: string): string => {
+    switch (clientPriorities.get(clientId)) {
+      case ProjectPriority.Alta: return 'bg-signal';
+      case ProjectPriority.Media: return 'bg-white';
+      default: return 'bg-neutral-600';
     }
   };
+
+  const navItems: { view: string; label: string; isActive: (v: string) => boolean }[] = [
+    { view: 'dashboard', label: 'Dashboard', isActive: v => v === 'dashboard' },
+    { view: 'projects', label: 'Progetti', isActive: v => v === 'projects' || v.startsWith('project:') },
+    { view: 'documents', label: 'Documenti', isActive: v => v === 'documents' || v.startsWith('doc:') },
+    { view: 'tasks', label: 'Attività', isActive: v => v === 'tasks' },
+    { view: 'calendar', label: 'Calendario', isActive: v => v === 'calendar' },
+    { view: 'settings', label: 'Impostazioni', isActive: v => v === 'settings' },
+  ];
 
   const handleSelectView = (view: string) => {
     setSelectedView(view);
@@ -717,154 +608,248 @@ const MainApp: React.FC<{ onLogout: () => void; initialData: AppData; userId: st
     }
   };
 
-  const fabAction = () => {
-      if(selectedClient){
-          openModal('project', selectedClient.id)
-      } else {
-          openModal('client')
-      }
+  const fab = selectedProject
+    ? { label: 'Aggiungi Attività', action: () => openModal('todo', selectedProject.id) }
+    : selectedClient
+      ? { label: 'Aggiungi Progetto', action: () => openModal('project', selectedClient.id) }
+      : selectedView === 'projects'
+        ? { label: 'Aggiungi Progetto', action: () => openModal('project') }
+        : selectedView === 'documents'
+          ? { label: 'Nuovo Documento', action: () => handleCreateDocument(null) }
+          : { label: 'Aggiungi Cliente', action: () => openModal('client') };
+
+  if (loadError) {
+    return <FullScreenMessage>
+      <p className="font-semibold">Impossibile leggere i dati.</p>
+      <p className="text-sm text-muted-foreground max-w-md">{loadError}</p>
+      <button onClick={onLogout} className="btn btn-primary px-4 py-2">Esci</button>
+    </FullScreenMessage>;
+  }
+
+  if (!data) {
+    return <FullScreenMessage>Caricamento dati...</FullScreenMessage>;
   }
 
   return (
-    <div className="relative min-h-screen md:flex font-sans bg-background text-foreground dark:bg-dark-background dark:text-dark-foreground">
-      <header className="md:hidden flex justify-between items-center p-4 bg-card dark:bg-dark-card text-foreground dark:text-dark-foreground shadow-lg fixed top-0 left-0 right-0 z-20 h-16 border-b border-muted dark:border-dark-muted">
-        <div className="flex items-center">
-            <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
-            <h1 className="text-xl font-bold ml-2">Progetta</h1>
-        </div>
+    <div className="relative min-h-screen md:flex font-sans bg-background text-foreground">
+      <header className="md:hidden flex justify-between items-center px-4 bg-black text-white fixed top-0 left-0 right-0 z-20 h-14">
+        <Wordmark />
         <button onClick={() => setIsSidebarOpen(true)} className="p-2" aria-label="Apri menu">
             <MenuIcon className="w-6 h-6"/>
         </button>
       </header>
 
       {isSidebarOpen && (
-          <div 
-              className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30" 
+          <div
+              className="md:hidden fixed inset-0 bg-black/60 z-30"
               onClick={() => setIsSidebarOpen(false)}
               aria-hidden="true"
           ></div>
       )}
 
-      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-secondary dark:bg-dark-secondary text-secondary-foreground dark:text-dark-secondary-foreground flex flex-col p-4 shadow-2xl transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center">
-                <img src="/logo.svg" alt="Progetta Logo" className="w-8 h-8"/>
-                <h1 className="text-2xl font-bold ml-2">Progetta</h1>
-            </div>
-            <div className="flex items-center gap-2">
-                <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-muted dark:hover:bg-dark-muted transition-colors" aria-label="Cambia tema">
-                    {theme === 'light' ? <MoonIcon className="w-5 h-5"/> : <SunIcon className="w-5 h-5"/>}
+      {/* Barra laterale: sempre nera, in entrambi i temi */}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-black text-white flex flex-col px-6 py-7 transform transition-transform duration-300 ease-in-out md:sticky md:top-0 md:h-screen md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex items-center justify-between mb-10">
+            <Wordmark />
+            <div className="flex items-center -mr-2">
+                <button onClick={toggleTheme} className="p-2 text-neutral-400 hover:text-white" aria-label={theme === 'light' ? 'Passa al tema scuro' : 'Passa al tema chiaro'}>
+                    {theme === 'light' ? <MoonIcon className="w-[18px] h-[18px]"/> : <SunIcon className="w-[18px] h-[18px]"/>}
                 </button>
-                 <button onClick={onLogout} className="p-2 rounded-full hover:bg-muted dark:hover:bg-dark-muted transition-colors" aria-label="Esci">
-                    <LogOutIcon className="w-5 h-5"/>
+                <button onClick={onLogout} className="p-2 text-neutral-400 hover:text-white" aria-label="Esci">
+                    <LogOutIcon className="w-[18px] h-[18px]"/>
                 </button>
-                <button onClick={() => setIsSidebarOpen(false)} className="p-2 rounded-full hover:bg-muted dark:hover:bg-dark-muted md:hidden" aria-label="Chiudi menu">
+                <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-neutral-400 hover:text-white md:hidden" aria-label="Chiudi menu">
                     <XIcon className="w-5 h-5"/>
                 </button>
             </div>
         </div>
-        <nav ref={navRef} className={`flex-grow overflow-y-auto no-scrollbar ${isNavScrollable ? 'fade-bottom' : ''}`}>
-            <ul>
-                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'dashboard' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('dashboard')}><ChartBarIcon className="w-5 h-5 mr-3"/> Dashboard</li>
-                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'tasks' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('tasks')}><ListTodoIcon className="w-5 h-5 mr-3"/> Attività</li>
-                <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'calendar' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('calendar')}><CalendarIcon className="w-5 h-5 mr-3"/> Calendario</li>
-                 <li className={`flex items-center p-3 rounded-lg cursor-pointer mb-2 transition-colors font-medium ${selectedView === 'settings' ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'}`} onClick={() => handleSelectView('settings')}><CogIcon className="w-5 h-5 mr-3"/> Impostazioni</li>
+        <nav ref={navRef} aria-label="Navigazione principale" className={`flex-grow overflow-y-auto no-scrollbar ${isNavScrollable ? 'fade-bottom' : ''}`}>
+            <ul className="border-b border-neutral-800">
+                {navItems.map(item => {
+                    const active = item.isActive(selectedView);
+                    return (
+                        <li key={item.view} className="border-t border-neutral-800">
+                            <button onClick={() => handleSelectView(item.view)} aria-current={active ? 'page' : undefined}
+                                className={`w-full flex items-center justify-between py-2.5 text-left ${active ? 'text-white font-semibold' : 'text-neutral-400 hover:text-white'}`}>
+                                {item.label}
+                                {active && <span aria-hidden="true" className="w-2 h-2 bg-signal"></span>}
+                            </button>
+                        </li>
+                    );
+                })}
             </ul>
-            <h2 className="text-sm font-semibold text-muted-foreground dark:text-dark-muted-foreground mt-6 mb-2 px-3 uppercase">Clienti</h2>
+            <h2 className="mt-10 mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500">Clienti</h2>
             <ul>
                 {sortedClients.map((client) => (
-                    <li key={client.id} draggable="true" onDragStart={e => handleDragStart(e, client)} onDragOver={handleDragOver} onDragEnter={e => handleDragEnter(e, client)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, client)} onDragEnd={handleDragEnd} 
-                        className={`group flex items-center justify-between p-3 rounded-lg cursor-grab mb-1 transition-all text-sm border-l-4
-                        ${selectedView === client.id ? 'bg-primary/10 text-primary dark:text-dark-primary' : 'hover:bg-muted dark:hover:bg-dark-muted'} 
-                        ${getPriorityClass(client.id)}
-                        ${inactiveClients.has(client.id) ? 'opacity-60' : ''}`}>
-                        <div className="flex items-center flex-1 min-w-0" onClick={() => handleSelectView(client.id)}>
-                            <UsersIcon className="w-4 h-4 mr-3 flex-shrink-0"/> 
+                    <li key={client.id} draggable="true" onDragStart={e => handleDragStart(e, client)} onDragOver={handleDragOver} onDragEnter={e => handleDragEnter(e, client)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, client)} onDragEnd={handleDragEnd}
+                        className={`cursor-grab ${inactiveClients.has(client.id) ? 'opacity-50' : ''}`}>
+                        <button onClick={() => handleSelectView(client.id)} aria-current={selectedView === client.id ? 'page' : undefined}
+                            className={`w-full flex items-center gap-2.5 py-1.5 text-left text-sm ${selectedView === client.id ? 'text-white font-semibold' : 'text-neutral-300 hover:text-white'}`}>
+                            <span aria-hidden="true" className={`w-1.5 h-1.5 flex-shrink-0 ${priorityDotClass(client.id)}`}></span>
                             <span className="truncate">{client.name}</span>
-                        </div>
+                        </button>
                     </li>
                 ))}
             </ul>
         </nav>
-        <div className="mt-auto pt-4 text-center text-xs text-muted-foreground flex-shrink-0">v1.7.0</div>
+        <div className="pt-4 text-[11px] text-neutral-600 flex-shrink-0">v2.0</div>
       </aside>
 
-      <main className="w-full md:flex-1 p-4 sm:p-8 overflow-y-auto mt-16 md:mt-0">
-        {selectedView === 'dashboard' && <Dashboard 
-            collectedIncome={dashboardTotals.collected} 
+      <main className="w-full md:flex-1 px-4 pt-6 sm:px-12 sm:pt-7 pb-28 sm:pb-28 mt-14 md:mt-0 min-w-0">
+        {selectedView === 'dashboard' && <Dashboard
+            collectedIncome={dashboardTotals.collected}
             futureIncome={dashboardTotals.future}
-            potentialIncome={dashboardTotals.potential} 
+            potentialIncome={dashboardTotals.potential}
             chartData={chartData}
             filterYear={filterYear}
             setFilterYear={setFilterYear}
             filterMonth={filterMonth}
             setFilterMonth={setFilterMonth}
             availableYears={availableYears}
+            projects={projects}
+            clients={clients}
+            todos={todos}
+            projectTotals={allProjectTotals}
+            onOpenProject={openProject}
+            onOpenTasks={() => handleSelectView('tasks')}
+            onOpenProjects={() => handleSelectView('projects')}
+            onNewProject={() => openModal('project')}
         />}
         {selectedView === 'tasks' && <TaskView todos={todos} projects={projects} clients={clients} onToggleTodo={handleToggleTodo} onDeleteTodo={handleDeleteTodo} onReorderTodos={handleReorderTodos}/>}
-        {selectedView === 'calendar' && <CalendarView todos={todos} projects={projects} clients={clients}/>}
-        {selectedView === 'settings' && <SettingsView 
-            userId={userId} 
-            onImportSuccess={(data) => {
-                setClients(data.clients);
-                setProjects(data.projects);
-                setTodos(data.todos);
-            }}
-        />}
-        {selectedClient && (
-            <ClientView 
-                client={selectedClient} 
-                projects={projects.filter(p => p.clientId === selectedClient.id)} 
-                todos={todos}
+        {selectedView === 'calendar' && <div className="max-w-[1120px]"><PageHeader overline="Scadenze delle attività" title="Calendario" /><CalendarView todos={todos} projects={projects} clients={clients}/></div>}
+        {selectedView === 'documents' && (
+            <div className="max-w-[1120px]">
+                <PageHeader overline={`${documents.length} ${documents.length === 1 ? 'documento' : 'documenti'}`} title="Documenti" />
+                <DocumentsList documents={documents} projects={projects} clients={clients} groupByProject onOpen={openDocument} onCreate={() => handleCreateDocument(null)} />
+            </div>
+        )}
+        {selectedDocument && (
+            <DocumentEditor
+                key={selectedDocument.id}
+                userId={userId}
+                document={selectedDocument}
+                projects={projects}
+                clients={clients}
+                onBack={() => handleSelectView(selectedDocument.projectId ? `project:${selectedDocument.projectId}` : 'documents')}
+                onDelete={handleDeleteDocument}
+                persist={persist}
+            />
+        )}
+        {selectedView === 'projects' && <ProjectsView projects={projects} clients={clients} projectTotals={allProjectTotals} onOpenProject={openProject} />}
+        {selectedProject && (
+            <ProjectDetail
+                key={selectedProject.id}
+                project={selectedProject}
+                client={clients.find(c => c.id === selectedProject.clientId)}
+                todos={todos.filter(t => t.projectId === selectedProject.id)}
+                onBack={() => handleSelectView(selectedProject.clientId)}
                 onUpdateProjectWorkStatus={handleUpdateProjectWorkStatus}
                 onUpdateProjectPaymentStatus={handleUpdateProjectPaymentStatus}
                 onUpdateProjectPriority={handleUpdateProjectPriority}
+                onUpdateProjectNotes={handleUpdateProjectNotes}
+                onEditProject={projectId => openModal('editProject', projectId)}
+                onDeleteProject={handleDeleteProject}
                 onToggleTodo={handleToggleTodo}
+                onDeleteTodo={handleDeleteTodo}
                 onAddTodo={projectId => openModal('todo', projectId)}
                 onAddPayment={projectId => openModal('payment', projectId)}
                 onDeletePayment={handleDeletePayment}
+                quotesCount={quotes.filter(q => q.projectId === selectedProject.id).length}
+                documentsCount={documents.filter(d => d.projectId === selectedProject.id).length}
+                documentsTab={
+                    <DocumentsList
+                        documents={documents.filter(d => d.projectId === selectedProject.id)}
+                        projects={projects} clients={clients} groupByProject={false}
+                        onOpen={openDocument}
+                        onCreate={() => handleCreateDocument(selectedProject.id)}
+                    />
+                }
+                quotesTab={
+                    <QuotesTab
+                        project={selectedProject}
+                        client={clients.find(c => c.id === selectedProject.clientId)}
+                        quotes={quotes.filter(q => q.projectId === selectedProject.id)}
+                        allQuotes={quotes}
+                        profile={profile}
+                        onSave={handleSaveQuote}
+                        onDelete={handleDeleteQuote}
+                        onChangeStatus={handleChangeQuoteStatus}
+                        onOpenSettings={() => handleSelectView('settings')}
+                    />
+                }
+            />
+        )}
+        {selectedView === 'settings' && <SettingsView userId={userId} profile={profile} onSaveProfile={p => persist(firebaseService.saveProfile(userId, p))} />}
+        {selectedClient && (
+            <ClientView
+                client={selectedClient}
+                projects={projects.filter(p => p.clientId === selectedClient.id)}
+                projectTotals={allProjectTotals}
+                onOpenProject={openProject}
                 onAiAddProject={openAiModal}
-                onDeleteProject={handleDeleteProject}
-                onEditProject={projectId => openModal('editProject', projectId)}
-                onDeleteTodo={handleDeleteTodo}
-                onUpdateProjectNotes={handleUpdateProjectNotes}
                 onDeleteClient={handleDeleteClient}
             />
         )}
       </main>
       
-      <button 
-        onClick={fabAction}
-        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-primary text-primary-foreground dark:bg-dark-primary dark:text-dark-primary-foreground shadow-lg hover:bg-primary-hover dark:hover:bg-dark-primary-hover flex items-center justify-center transform hover:scale-105 transition-transform"
-        aria-label={selectedClient ? "Aggiungi Progetto" : "Aggiungi Cliente"}
+      {!selectedDocument && <button 
+        onClick={fab.action}
+        className="fixed bottom-6 right-6 w-14 h-14 bg-signal text-black hover:bg-accent-hover flex items-center justify-center"
+        aria-label={fab.label}
       >
         <PlusIcon className="w-7 h-7" />
-      </button>
+      </button>}
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalTitle()}><FormComponent /></Modal>
-      <Modal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} title="Crea Progetto con AI">{aiContextClientId && <AiFormComponent clientId={aiContextClientId} onComplete={() => setIsAiModalOpen(false)} />}</Modal>
+      {saveError && (
+        <div role="alert" className="fixed bottom-24 left-4 right-4 md:left-auto md:max-w-md z-50 flex items-start gap-3 p-4 rounded-lg shadow-lg bg-red-600 text-white">
+          <p className="text-sm flex-1">{saveError}</p>
+          <button onClick={() => setSaveError(null)} aria-label="Chiudi avviso"><XIcon className="w-5 h-5" /></button>
+        </div>
+      )}
+
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalTitle()}>
+        {modalContent && (
+          <EntityForm
+            key={modalKey}
+            type={modalContent}
+            contextId={currentContextId}
+            clients={clients}
+            projects={projects}
+            onAddClient={handleAddClient}
+            onAddProject={handleAddProject}
+            onUpdateProject={handleUpdateProject}
+            onAddTodo={handleAddTodo}
+            onAddPayment={handleAddPayment}
+            onDone={() => setIsModalOpen(false)}
+          />
+        )}
+      </Modal>
+      <Modal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} title="Crea Progetto con AI">
+        {aiContextClientId && <AiProjectForm key={modalKey} onGenerated={handleAiGenerated(aiContextClientId)} onComplete={() => setIsAiModalOpen(false)} />}
+      </Modal>
     </div>
   );
 };
 
 export default function App() {
-  const [authState, setAuthState] = useState<{ state: AppState; user: User | null; data: AppData | null }>({ state: 'loading', user: null, data: null });
+  const [authState, setAuthState] = useState<{ state: AppState; user: User | null; error?: string }>({ state: 'loading', user: null });
   const [authView, setAuthView] = useState<'login' | 'setup'>('login');
 
   useEffect(() => {
     const unsubscribe = firebaseService.onAuthChange(async (user) => {
-      if (user) {
-        setAuthState(prev => ({ ...prev, state: 'loading' }));
-        try {
-            const userData = await firebaseService.getData(user.uid);
-            setAuthState({ state: 'authenticated', user, data: userData });
-        } catch (error) {
-            console.error("Errore nel caricamento dei dati:", error);
-            await firebaseService.logout();
-            setAuthState({ state: 'unauthenticated', user: null, data: null });
-        }
-      } else {
-        setAuthState({ state: 'unauthenticated', user: null, data: null });
+      if (!user) {
+        setAuthState({ state: 'unauthenticated', user: null });
+        return;
+      }
+      setAuthState({ state: 'loading', user: null });
+      try {
+        // Converte i dati dal vecchio formato, se necessario (operazione non distruttiva)
+        await firebaseService.ensureMigrated(user.uid);
+        setAuthState({ state: 'authenticated', user });
+      } catch (error) {
+        // Nessun logout automatico e nessuna scrittura: si mostra l'errore e basta.
+        console.error("Errore nella preparazione dei dati:", error);
+        setAuthState({ state: 'error', user, error: error instanceof Error ? error.message : String(error) });
       }
     });
     return () => unsubscribe();
@@ -873,20 +858,25 @@ export default function App() {
   const handleLogout = async () => {
     await firebaseService.logout();
   };
-  
+
   switch (authState.state) {
     case 'loading':
-      return <div className="flex items-center justify-center h-screen bg-background text-foreground">Caricamento in corso...</div>;
+      return <FullScreenMessage>Caricamento in corso...</FullScreenMessage>;
+    case 'error':
+      return <FullScreenMessage>
+        <p className="font-semibold">Impossibile preparare i dati del tuo account.</p>
+        <p className="text-sm text-muted-foreground max-w-md">{authState.error}</p>
+        <p className="text-sm text-muted-foreground max-w-md">I tuoi dati non sono stati modificati. Se l'errore parla di permessi, controlla che le regole Firestore siano aggiornate.</p>
+        <div className="flex gap-2">
+          <button onClick={() => window.location.reload()} className="btn btn-primary px-4 py-2">Riprova</button>
+          <button onClick={handleLogout} className="btn px-4 py-2 border">Esci</button>
+        </div>
+      </FullScreenMessage>;
     case 'unauthenticated':
-      return authView === 'login' 
+      return authView === 'login'
         ? <LoginScreen onNavigateToRegister={() => setAuthView('setup')} />
         : <SetupScreen onNavigateToLogin={() => setAuthView('login')} />;
     case 'authenticated':
-      if (!authState.data || !authState.user) {
-        return <div className="flex items-center justify-center h-screen bg-background text-foreground">Caricamento dati utente...</div>;
-      }
-      return <MainApp onLogout={handleLogout} initialData={authState.data} userId={authState.user.uid} />;
-    default:
-      return <LoginScreen onNavigateToRegister={() => setAuthView('setup')} />;
+      return <MainApp key={authState.user!.uid} onLogout={handleLogout} userId={authState.user!.uid} />;
   }
 }

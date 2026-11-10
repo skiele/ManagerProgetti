@@ -42,13 +42,13 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
       role="dialog"
     >
       <div
-        className={`bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-md transform transition-all duration-300 ease-in-out
+        className={`bg-card border-4 border-foreground w-full max-w-md transform transition-all duration-300 ease-in-out
           ${isOpen ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-4 scale-95'}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors" aria-label="Chiudi modale">
+        <div className="flex justify-between items-center p-4 border-b-2 border-foreground">
+          <h3 className="text-xl font-extrabold tracking-[-0.02em] text-foreground">{title}</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Chiudi modale">
             <XIcon className="w-6 h-6" />
           </button>
         </div>

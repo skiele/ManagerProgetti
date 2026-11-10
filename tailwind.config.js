@@ -8,29 +8,25 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Light Theme
-        primary: 'hsl(225 76% 52%)',
-        'primary-hover': 'hsl(225 76% 58%)',
-        'primary-foreground': 'hsl(0 0% 100%)',
-        
-        secondary: 'hsl(220 13% 91%)',
-        'secondary-foreground': 'hsl(222 8% 25%)',
-        
-        background: 'hsl(220 14% 96%)',
-        foreground: 'hsl(224 10% 10%)',
-        
-        card: 'hsl(0 0% 100%)',
-        'card-foreground': 'hsl(224 10% 10%)',
-        
-        muted: 'hsl(220 13% 91%)',
-        'muted-foreground': 'hsl(220 9% 46%)',
-        
-        accent: 'hsl(173 80% 40%)',
-        'accent-hover': 'hsl(173 80% 46%)',
-        'accent-foreground': 'hsl(0 0% 100%)',
-        
-        destructive: 'hsl(0 72% 51%)',
-        'destructive-foreground': 'hsl(0 0% 100%)',
+        // Colori del tema: variabili CSS definite in src/index.css (:root = chiaro, .dark = scuro).
+        // Cambiano da sole con il tema, quindi non servono più le varianti dark:.
+        'primary': 'hsl(var(--primary) / <alpha-value>)',
+        'primary-hover': 'hsl(var(--primary-hover) / <alpha-value>)',
+        'primary-foreground': 'hsl(var(--primary-foreground) / <alpha-value>)',
+        'secondary': 'hsl(var(--secondary) / <alpha-value>)',
+        'secondary-foreground': 'hsl(var(--secondary-foreground) / <alpha-value>)',
+        'background': 'hsl(var(--background) / <alpha-value>)',
+        'foreground': 'hsl(var(--foreground) / <alpha-value>)',
+        'card': 'hsl(var(--card) / <alpha-value>)',
+        'card-foreground': 'hsl(var(--card-foreground) / <alpha-value>)',
+        'muted': 'hsl(var(--muted) / <alpha-value>)',
+        'muted-foreground': 'hsl(var(--muted-foreground) / <alpha-value>)',
+        'accent': 'hsl(var(--accent) / <alpha-value>)',
+        'accent-hover': 'hsl(var(--accent-hover) / <alpha-value>)',
+        'accent-foreground': 'hsl(var(--accent-foreground) / <alpha-value>)',
+        'destructive': 'hsl(var(--destructive) / <alpha-value>)',
+        'destructive-foreground': 'hsl(var(--destructive-foreground) / <alpha-value>)',
+        'signal': 'hsl(var(--signal) / <alpha-value>)',
 
         // Dark Theme
         dark: {
@@ -58,11 +54,10 @@ export default {
           'destructive-foreground': 'hsl(0 0% 100%)',
         }
       },
-      borderRadius: {
-        lg: `0.75rem`,
-        md: `calc(0.75rem - 2px)`,
-        sm: `calc(0.75rem - 4px)`,
-      },
+      // Angoli vivi e superfici piatte: niente arrotondamenti né ombre
+      borderRadius: { lg: '0px', md: '0px', sm: '0px', DEFAULT: '0px' },
+      boxShadow: { sm: 'none', DEFAULT: 'none', md: 'none', lg: 'none', xl: 'none', '2xl': 'none' },
+      fontFamily: { sans: ['Archivo', 'Helvetica Neue', 'Arial', 'sans-serif'] },
     },
   },
   plugins: [],

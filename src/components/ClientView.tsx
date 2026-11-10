@@ -1,92 +1,54 @@
 import React from 'react';
-import { Client, Project, Todo, WorkStatus, PaymentStatus, ProjectPriority } from '../types';
-import { PlusIcon, SparklesIcon, TrashIcon } from './icons';
-import ProjectCard from './ProjectCard';
+import { Client, Project } from '../types';
+import { SparklesIcon, TrashIcon } from './icons';
+import PageHeader from './PageHeader';
+import { ProjectRow } from './ProjectsView';
 
 interface ClientViewProps {
     client: Client;
     projects: Project[];
-    todos: Todo[];
-    onUpdateProjectWorkStatus: (id: string, status: WorkStatus) => void;
-    onUpdateProjectPaymentStatus: (id: string, status: PaymentStatus) => void;
-    onUpdateProjectPriority: (id: string, priority: ProjectPriority) => void;
-    onToggleTodo: (id: string, completed: boolean) => void;
+    projectTotals: Map<string, number>;
+    onOpenProject: (id: string) => void;
     onAiAddProject: (clientId: string) => void;
-    onAddTodo: (projectId: string) => void;
-    onAddPayment: (projectId: string) => void;
-    onDeletePayment: (projectId: string, paymentId: string) => void;
-    onDeleteProject: (id: string) => void;
-    onEditProject: (id: string) => void;
-    onDeleteTodo: (id: string) => void;
-    onUpdateProjectNotes: (id: string, notes: string) => void;
     onDeleteClient: (clientId: string) => void;
 }
 
-const ClientView: React.FC<ClientViewProps> = ({ 
-    client, 
-    projects, 
-    todos, 
-    onUpdateProjectWorkStatus, 
-    onUpdateProjectPaymentStatus,
-    onUpdateProjectPriority, 
-    onToggleTodo, 
-    onAiAddProject, 
-    onAddTodo, 
-    onAddPayment,
-    onDeletePayment,
-    onDeleteProject, 
-    onEditProject, 
-    onDeleteTodo, 
-    onUpdateProjectNotes,
-    onDeleteClient
-}) => (
-    <div>
-        <div className="flex flex-col sm:flex-row justify-between items-start mb-6 gap-4 pb-4 border-b border-muted dark:border-dark-muted">
-            <div>
-                <h1 className="text-3xl font-bold">{client.name}</h1>
-                {client.email && <p className="text-muted-foreground">{client.email}</p>}
-            </div>
-             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                <button onClick={() => onAiAddProject(client.id)} className="bg-accent text-accent-foreground px-4 py-2 rounded-lg font-semibold flex items-center justify-center hover:bg-accent-hover transition-colors shadow">
-                    <SparklesIcon className="w-5 h-5 mr-2"/> Crea con AI
-                </button>
-            </div>
-        </div>
-        <div className="space-y-6">
-            {projects.map(project => (
-                <ProjectCard
-                    key={project.id}
-                    project={project}
-                    todos={todos.filter(todo => todo.projectId === project.id)}
-                    onUpdateProjectWorkStatus={onUpdateProjectWorkStatus}
-                    onUpdateProjectPaymentStatus={onUpdateProjectPaymentStatus}
-                    onUpdateProjectPriority={onUpdateProjectPriority}
-                    onToggleTodo={onToggleTodo}
-                    onAddTodo={onAddTodo}
-                    onAddPayment={onAddPayment}
-                    onDeletePayment={onDeletePayment}
-                    onDeleteProject={onDeleteProject}
-                    onEditProject={onEditProject}
-                    onDeleteTodo={onDeleteTodo}
-                    onUpdateProjectNotes={onUpdateProjectNotes}
-                />
-            ))}
-             {projects.length === 0 && (
-                <div className="text-center text-muted-foreground py-8 border-2 border-dashed border-muted dark:border-dark-muted rounded-lg">
-                    <p>Nessun progetto per questo cliente.</p>
+// Pagina cliente: elenco compatto dei progetti; attività, pagamenti e preventivi si gestiscono nella pagina progetto.
+const ClientView: React.FC<ClientViewProps> = ({ client, projects, projectTotals, onOpenProject, onAiAddProject, onDeleteClient }) => {
+    const sorted = [...projects].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return (
+        <div className="max-w-[1120px]">
+            <PageHeader
+                overline={`Cliente · ${projects.length} ${projects.length === 1 ? 'progetto' : 'progetti'}`}
+                title={client.name}
+                subtitle={client.email}
+                actions={
+                    <button onClick={() => onAiAddProject(client.id)} className="h-10 px-4 border-2 border-foreground font-semibold flex items-center hover:bg-muted">
+                        <SparklesIcon className="w-4 h-4 mr-2"/> Crea con AI
+                    </button>
+                }
+            />
+
+            {sorted.length === 0
+                ? <p className="py-10 text-muted-foreground border-t-2 border-foreground">Nessun progetto per questo cliente. Aggiungine uno con il pulsante +.</p>
+                : <ul className="border-t-2 border-foreground">
+                    {sorted.map(p => (
+                        <ProjectRow key={p.id} project={p} total={projectTotals.get(p.id) ?? p.value} onOpen={onOpenProject}
+                            subtitle={`Creato il ${new Date(p.createdAt).toLocaleDateString('it-IT')}`} />
+                    ))}
+                  </ul>}
+
+            <section aria-labelledby="danger-zone" className="mt-16 pt-4 border-t-2 border-destructive">
+                <h2 id="danger-zone" className="text-[11px] font-semibold uppercase tracking-[0.12em] text-destructive">Zona pericolo</h2>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-3 gap-4">
+                    <p className="text-sm text-muted-foreground">Elimina il cliente con tutti i suoi progetti, attività e preventivi. Non si può annullare.</p>
+                    <button onClick={() => onDeleteClient(client.id)} className="h-10 px-4 border-2 border-destructive text-destructive font-semibold flex items-center hover:bg-destructive hover:text-destructive-foreground flex-shrink-0">
+                        <TrashIcon className="w-4 h-4 mr-2"/> Elimina cliente
+                    </button>
                 </div>
-             )}
+            </section>
         </div>
-        <div className="mt-10 pt-6 border-t border-destructive/20 dark:border-dark-destructive/20">
-            <h3 className="text-lg font-semibold text-destructive dark:text-dark-destructive-foreground">Zona Pericolo</h3>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-2 gap-4">
-                <p className="text-sm text-muted-foreground">L'eliminazione di un cliente è un'azione permanente e non può essere annullata.</p>
-                <button onClick={() => onDeleteClient(client.id)} className="bg-destructive/10 text-destructive dark:text-destructive-foreground hover:bg-destructive/20 px-4 py-2 rounded-lg font-semibold flex items-center transition-colors text-sm flex-shrink-0">
-                    <TrashIcon className="w-4 h-4 mr-2"/> Elimina Cliente
-                </button>
-            </div>
-        </div>
-    </div>
-);
+    );
+};
 
 export default ClientView;

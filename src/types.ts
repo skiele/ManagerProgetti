@@ -24,6 +24,7 @@ export interface Client {
   id: string;
   name: string;
   email?: string;
+  order?: number;
 }
 
 export interface Payment {
@@ -56,3 +57,91 @@ export interface Todo {
   dueDate?: string;
   order?: number;
 }
+
+export enum QuoteStatus {
+  Bozza = 'bozza',
+  Inviato = 'inviato',
+  Accettato = 'accettato',
+  Rifiutato = 'rifiutato',
+}
+
+export interface QuoteItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface Quote {
+  id: string;
+  projectId: string;
+  number: string;        // es. "2026-001"
+  date: string;          // YYYY-MM-DD
+  validityDays: number;
+  status: QuoteStatus;
+  recipient: string;     // intestatario (testo libero, più righe)
+  items: QuoteItem[];
+  notes?: string;
+  chargeStampDuty: boolean; // marca da bollo addebitata al cliente
+  createdAt: string;
+}
+
+// Dati di chi emette il preventivo (users/{uid}/settings/profile)
+export interface BusinessProfile {
+  name: string;
+  vatNumber?: string;
+  fiscalCode?: string;
+  address?: string;
+  email?: string;
+  phone?: string;
+  iban?: string;
+  taxNote?: string;      // dicitura fiscale in calce
+}
+
+export enum DocumentKind {
+  Soggetto = 'soggetto',
+  Trattamento = 'trattamento',
+  Sceneggiatura = 'sceneggiatura',
+  Note = 'note',
+  Altro = 'altro',
+}
+
+// Testo (Markdown) in users/{uid}/documents/{id}
+export interface TextDocument {
+  id: string;
+  projectId: string | null;   // null = non legato a un progetto
+  title: string;
+  kind: DocumentKind;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: 'app' | 'claude';
+  revision: number;           // cresce a ogni salvataggio
+}
+
+// Versione precedente di un documento, in users/{uid}/revisions/{id}
+export interface DocumentRevision {
+  id: string;
+  documentId: string;
+  title: string;
+  content: string;
+  revision: number;
+  savedAt: string;
+  reason: string;
+}
+
+// Azione eseguita da Claude tramite il connettore, in users/{uid}/activity/{id}
+export interface ClaudeActivity {
+  id: string;
+  at: string;
+  tool: string;
+  summary: string;
+}
+
+export type AppData = {
+  clients: Client[];
+  projects: Project[];
+  todos: Todo[];
+  quotes: Quote[];
+  documents: TextDocument[];
+};
