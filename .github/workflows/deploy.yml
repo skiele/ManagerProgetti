@@ -49,9 +49,22 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
       # La compilazione (npm run build) la esegue firebase.json prima della pubblicazione
+      # Fino a 3 tentativi: i server di Firebase ogni tanto rispondono con un errore temporaneo
       - name: Pubblica il sito
-        run: npx --yes firebase-tools@15 deploy --only hosting --project progetta-800ca --non-interactive
+        run: |
+          for i in 1 2 3; do
+            npx --yes firebase-tools@15 deploy --only hosting --project progetta-800ca --non-interactive && exit 0
+            echo "Tentativo $i non riuscito, riprovo tra 30 secondi..."
+            sleep 30
+          done
+          exit 1
 
       # --force: conferma da solo le domande del deploy (nessuna funzione viene eliminata: c'è solo "mcp")
       - name: Pubblica il connettore Claude e le regole di sicurezza
-        run: npx --yes firebase-tools@15 deploy --only functions,firestore:rules --project progetta-800ca --non-interactive --force
+        run: |
+          for i in 1 2 3; do
+            npx --yes firebase-tools@15 deploy --only functions,firestore:rules --project progetta-800ca --non-interactive --force && exit 0
+            echo "Tentativo $i non riuscito, riprovo tra 30 secondi..."
+            sleep 30
+          done
+          exit 1
