@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Progetta: "P" bianca e punto arancio su quadrato nero -->
+  <rect width="64" height="64" fill="#000"/>
+  <path fill="#fff" fill-rule="evenodd" d="M12 10h21a15 15 0 0 1 0 30h-9v14H12z M24 21v8h8a4 4 0 0 0 0-8z"/>
+  <rect x="40" y="42" width="12" height="12" fill="#FF3B00"/>
+</svg>
